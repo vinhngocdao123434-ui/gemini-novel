@@ -120,8 +120,8 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 🤖 Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: 🐘 Setup Gradle Build Cache
+        uses: gradle/actions/setup-gradle@v4
 
       - name: 📦 Install Node Dependencies
         run: |
