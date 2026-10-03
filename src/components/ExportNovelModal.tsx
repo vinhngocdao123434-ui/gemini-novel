@@ -2,22 +2,17 @@ import React, { useState } from 'react';
 import {
   X,
   Download,
-  Share2,
-  Copy,
-  Check,
-  FileText,
   FolderDown,
   Info,
-  ChevronDown,
-  ChevronUp,
-  Smartphone,
   HardDrive,
+  ShieldCheck,
+  ExternalLink,
 } from 'lucide-react';
 import { ProjectData } from '../types';
 import {
-  triggerDataUriDownload,
-  triggerAndroidNativeShare,
-  saveToAndroidStorageMaster,
+  exportNovelStandard,
+  saveDirectToDownloadFolder,
+  openAndroidStorageSettings,
 } from '../utils/fileDownloader';
 
 interface ExportNovelModalProps {
@@ -33,10 +28,8 @@ export const ExportNovelModal: React.FC<ExportNovelModalProps> = ({
   onClose,
   onAddLog,
 }) => {
-  const [copied, setCopied] = useState<boolean>(false);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'info' | 'success' | 'warning' | 'error' } | null>(null);
-  const [showPreview, setShowPreview] = useState<boolean>(false);
 
   const transKeys = Object.keys(projectData.translatedChapters)
     .map(Number)
@@ -61,13 +54,35 @@ export const ExportNovelModal: React.FC<ExportNovelModalProps> = ({
 
   const filename = `${projectData.projectName}_FULL_TRANSLATED.txt`;
 
-  // 1. Ghi trực tiếp vào bộ nhớ Android (/storage/emulated/0/Download/) qua Native Java Plugin hoặc Direct Download
-  const handleSaveToAndroidStorage = async () => {
+  // 1. Xuất tệp theo chuẩn Android Storage Access Framework (SAF)
+  const handleSafExport = async () => {
     setIsExporting(true);
-    setStatusMessage({ text: 'Đang tiến hành ghi tệp vào bộ nhớ Android...', type: 'info' });
+    setStatusMessage({ text: 'Đang mở trình chọn vị trí lưu của hệ thống Android...', type: 'info' });
     try {
       const fullText = buildFullNovelText();
-      const res = await saveToAndroidStorageMaster(filename, fullText);
+      const res = await exportNovelStandard(filename, fullText);
+      if (res.success) {
+        setStatusMessage({ text: `✅ ${res.message}`, type: 'success' });
+        onAddLog(res.message, 'success');
+      } else {
+        setStatusMessage({ text: res.message, type: 'warning' });
+      }
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      setStatusMessage({ text: `Lỗi xuất tệp: ${errorMsg}`, type: 'error' });
+      onAddLog(`Lỗi xuất tệp: ${errorMsg}`, 'error');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // 2. Ghi nhanh vào /Download
+  const handleDirectDownload = async () => {
+    setIsExporting(true);
+    setStatusMessage({ text: 'Đang ghi vào thư mục /storage/emulated/0/Download/...', type: 'info' });
+    try {
+      const fullText = buildFullNovelText();
+      const res = await saveDirectToDownloadFolder(filename, fullText);
       if (res.success) {
         setStatusMessage({ text: `✅ ${res.message}`, type: 'success' });
         onAddLog(res.message, 'success');
@@ -77,59 +92,21 @@ export const ExportNovelModal: React.FC<ExportNovelModalProps> = ({
       }
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      setStatusMessage({ text: `Lỗi ghi tệp: ${errorMsg}`, type: 'error' });
+      setStatusMessage({ text: `Lỗi ghi file: ${errorMsg}`, type: 'error' });
     } finally {
       setIsExporting(false);
     }
   };
 
-  // 2. Tải trực tiếp bằng Data URI (Khuyên dùng khi trình duyệt mobile chặn Blob)
-  const handleDataUriDownload = () => {
-    setIsExporting(true);
+  // 3. Mở Cài đặt cấp quyền bộ nhớ Android
+  const handleOpenPermissions = async () => {
     try {
-      const fullText = buildFullNovelText();
-      const ok = triggerDataUriDownload(filename, fullText);
-      if (ok) {
-        const msg = `✅ Đã kích hoạt tải tệp ${filename} bằng luồng Data URI vào /storage/emulated/0/Download/!`;
-        setStatusMessage({ text: msg, type: 'success' });
-        onAddLog(msg, 'success');
-      } else {
-        setStatusMessage({ text: '❌ Không thể tải qua Data URI.', type: 'error' });
-      }
+      await openAndroidStorageSettings();
+      onAddLog('Đã mở màn hình cấp quyền Quản lý Tệp của Android.', 'info');
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      setStatusMessage({ text: `Lỗi tải: ${errorMsg}`, type: 'error' });
-    } finally {
-      setIsExporting(false);
+      alert(`Không thể mở Cài đặt: ${errorMsg}`);
     }
-  };
-
-  // 3. Mở Hộp thoại Lưu Tệp / Chia Sẻ Gốc của Android (Share Sheet)
-  const handleAndroidShare = async () => {
-    setIsExporting(true);
-    setStatusMessage({ text: 'Đang mở bảng chia sẻ/lưu tệp Android...', type: 'info' });
-    try {
-      const fullText = buildFullNovelText();
-      const res = await triggerAndroidNativeShare(filename, fullText);
-      setStatusMessage({ text: res.message, type: res.success ? 'success' : 'warning' });
-      onAddLog(res.message, res.success ? 'success' : 'warning');
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      setStatusMessage({ text: `Lỗi chia sẻ: ${errorMsg}`, type: 'error' });
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  // 4. Sao chép toàn bộ vào Clipboard
-  const handleCopyClipboard = () => {
-    const fullText = buildFullNovelText();
-    navigator.clipboard.writeText(fullText);
-    setCopied(true);
-    const msg = `📋 Đã sao chép toàn bộ ${totalTranslated} chương vào Bộ nhớ tạm (Clipboard)! Bạn có thể dán vào bất cứ đâu.`;
-    setStatusMessage({ text: msg, type: 'success' });
-    onAddLog(msg, 'success');
-    setTimeout(() => setCopied(false), 2500);
   };
 
   return (
@@ -142,7 +119,7 @@ export const ExportNovelModal: React.FC<ExportNovelModalProps> = ({
         paddingRight: 'max(0.75rem, env(safe-area-inset-right, 0px))',
       }}
     >
-      <div className="bg-[#141414] border border-[#30363d] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-[#141414] border border-[#30363d] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-[#222] flex items-center justify-between bg-[#161b22]">
           <div className="flex items-center gap-2.5">
@@ -150,8 +127,8 @@ export const ExportNovelModal: React.FC<ExportNovelModalProps> = ({
               <FolderDown className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm sm:text-base font-bold text-white">Xuất Toàn Văn Ra Bộ Nhớ Máy</h2>
-              <p className="text-xs text-gray-400">{projectData.projectName}</p>
+              <h2 className="text-sm sm:text-base font-bold text-white">Xuất File Toàn Văn</h2>
+              <p className="text-xs text-gray-400 truncate max-w-[220px]">{projectData.projectName}</p>
             </div>
           </div>
           <button
@@ -164,24 +141,21 @@ export const ExportNovelModal: React.FC<ExportNovelModalProps> = ({
 
         {/* Body */}
         <div className="p-4 sm:p-5 space-y-4 overflow-y-auto">
-          {/* File summary pill & Destination Path */}
-          <div className="p-3 rounded-xl bg-[#1c2128] border border-[#30363d] space-y-1.5 text-xs">
+          {/* Summary Card */}
+          <div className="p-3.5 rounded-xl bg-[#1c2128] border border-[#30363d] space-y-2 text-xs">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-gray-300">
-                <FileText className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span className="font-mono font-medium truncate max-w-[210px]">{filename}</span>
-              </div>
-              <span className="font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-md border border-blue-500/20">
+              <span className="text-gray-400">Tên tệp xuất:</span>
+              <span className="font-mono text-emerald-400 font-bold truncate max-w-[190px]">{filename}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-400">Số chương đã dịch:</span>
+              <span className="font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
                 {totalTranslated} / {projectData.rawChapters.length} Chương
               </span>
             </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-gray-400 pt-1 border-t border-gray-800">
-              <HardDrive className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span>Đường dẫn lưu trên Android: <code className="text-amber-300 font-mono">/storage/emulated/0/Download/</code></span>
-            </div>
           </div>
 
-          {/* Status Alert if triggered */}
+          {/* Status Alert */}
           {statusMessage && (
             <div
               className={`p-3 rounded-xl border text-xs flex items-start gap-2 animate-fade-in ${
@@ -197,96 +171,55 @@ export const ExportNovelModal: React.FC<ExportNovelModalProps> = ({
             </div>
           )}
 
-          {/* Action options */}
-          <div className="space-y-2.5">
-            {/* Option 1: Direct Download into Android /Download */}
+          {/* Main Action Buttons */}
+          <div className="space-y-3 pt-1">
+            {/* Primary Action: Standard Android SAF */}
             <button
-              onClick={handleSaveToAndroidStorage}
+              onClick={handleSafExport}
               disabled={isExporting || totalTranslated === 0}
-              className="w-full p-3.5 rounded-xl bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white font-medium text-xs sm:text-sm flex items-center justify-between shadow-lg transition cursor-pointer disabled:opacity-40"
+              className="w-full p-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm flex items-center justify-between shadow-lg transition cursor-pointer disabled:opacity-40"
             >
               <div className="flex items-center gap-3 text-left">
-                <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
-                  <Download className="w-4 h-4 text-white" />
-                </div>
+                <FolderDown className="w-5 h-5 text-white shrink-0" />
                 <div>
-                  <div className="font-bold">Ghi Vào Bộ Nhớ /Download (Android MediaStore / Native)</div>
-                  <div className="text-[11px] text-blue-100/80">Lưu vào bộ nhớ trong /storage/emulated/0/Download/</div>
+                  <div className="font-bold">Lưu Tệp (Hộp Thoại Android SAF)</div>
+                  <div className="text-[11px] text-blue-100/80 font-normal">
+                    Chọn thư mục bất kỳ trên máy và nhấn "Lưu"
+                  </div>
                 </div>
               </div>
-              <span className="text-xs bg-white/20 px-2 py-0.5 rounded font-mono font-bold">Khuyên dùng</span>
+              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded font-mono font-bold">Chuẩn Android</span>
             </button>
 
-            {/* Option 2: Fallback Data URI Download */}
+            {/* Fast Write to /Download */}
             <button
-              onClick={handleDataUriDownload}
+              onClick={handleDirectDownload}
               disabled={isExporting || totalTranslated === 0}
               className="w-full p-3.5 rounded-xl bg-[#1e293b] hover:bg-[#283548] border border-blue-500/30 text-gray-100 font-medium text-xs sm:text-sm flex items-center justify-between transition cursor-pointer disabled:opacity-40"
             >
               <div className="flex items-center gap-3 text-left">
-                <div className="w-8 h-8 rounded-lg bg-teal-500/20 flex items-center justify-center border border-teal-500/30">
-                  <FolderDown className="w-4 h-4 text-teal-400" />
-                </div>
+                <HardDrive className="w-4 h-4 text-emerald-400 shrink-0" />
                 <div>
-                  <div className="font-bold">Tải Dự Phòng (Data URI Stream)</div>
-                  <div className="text-[11px] text-gray-400">Dành riêng nếu máy bạn bị trình duyệt chặn tệp Blob</div>
+                  <div className="font-bold">Ghi Nhanh Vào /Download</div>
+                  <div className="text-[11px] text-gray-400 font-normal">
+                    Lưu trực tiếp vào /storage/emulated/0/Download/
+                  </div>
                 </div>
               </div>
-            </button>
-
-            {/* Option 3: Android Native Share Sheet */}
-            <button
-              onClick={handleAndroidShare}
-              disabled={isExporting || totalTranslated === 0}
-              className="w-full p-3.5 rounded-xl bg-[#1c221a] hover:bg-[#253022] border border-emerald-500/30 text-gray-100 font-medium text-xs sm:text-sm flex items-center justify-between transition cursor-pointer disabled:opacity-40"
-            >
-              <div className="flex items-center gap-3 text-left">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30">
-                  <Smartphone className="w-4 h-4 text-emerald-400" />
-                </div>
-                <div>
-                  <div className="font-bold">Mở Trình Lưu Hệ Thống Android (Share Sheet)</div>
-                  <div className="text-[11px] text-gray-400">Chọn Google Files, Drive, Zalo, Thẻ nhớ SD...</div>
-                </div>
-              </div>
-              <Share2 className="w-4 h-4 text-emerald-400" />
-            </button>
-
-            {/* Option 4: Copy to Clipboard */}
-            <button
-              onClick={handleCopyClipboard}
-              disabled={isExporting || totalTranslated === 0}
-              className="w-full p-3.5 rounded-xl bg-[#181818] hover:bg-[#222222] border border-[#333] text-gray-200 font-medium text-xs sm:text-sm flex items-center justify-between transition cursor-pointer disabled:opacity-40"
-            >
-              <div className="flex items-center gap-3 text-left">
-                <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center border border-amber-500/30">
-                  {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-amber-400" />}
-                </div>
-                <div>
-                  <div className="font-bold">{copied ? 'Đã sao chép vào Clipboard!' : 'Sao Chép Toàn Bộ Tác Phẩm (1 Chạm)'}</div>
-                  <div className="text-[11px] text-gray-400">Dán nhanh vào bất kỳ ứng dụng đọc sách nào trên điện thoại</div>
-                </div>
-              </div>
+              <Download className="w-4 h-4 text-emerald-400" />
             </button>
           </div>
 
-          {/* Collapsible Preview Box */}
-          <div className="pt-2 border-t border-gray-800">
+          {/* Android Permissions Link */}
+          <div className="pt-3 border-t border-gray-800 text-center">
             <button
-              onClick={() => setShowPreview(!showPreview)}
-              className="w-full flex items-center justify-between text-xs text-gray-400 hover:text-white py-1 cursor-pointer"
+              onClick={handleOpenPermissions}
+              className="inline-flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 transition cursor-pointer"
             >
-              <span>Xem trước toàn bộ văn bản xuất ({totalTranslated} chương)</span>
-              {showPreview ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              <ShieldCheck className="w-4 h-4" />
+              <span>Chưa cấp quyền bộ nhớ? Bấm để mở Cài đặt Android</span>
+              <ExternalLink className="w-3 h-3" />
             </button>
-
-            {showPreview && (
-              <div className="mt-2 p-3 bg-black/60 rounded-xl border border-gray-800 max-h-48 overflow-y-auto">
-                <pre className="text-[11px] text-gray-300 font-sans whitespace-pre-wrap select-text">
-                  {buildFullNovelText()}
-                </pre>
-              </div>
-            )}
           </div>
         </div>
 

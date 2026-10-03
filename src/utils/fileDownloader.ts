@@ -1,79 +1,104 @@
 /**
- * Bộ Điều Phối Xuất Tệp & Tải Xuống Chuẩn Cho Android (/storage/emulated/0/Download/)
- * Tích hợp trực tiếp Native Android Java MediaStore & Root Bridge + Web Fallback
+ * Bộ Xuất Tệp Chuẩn Cho Android & Web
+ * Áp dụng Storage Access Framework (SAF - ACTION_CREATE_DOCUMENT) chuẩn của Android
  */
 
 import { RootBridge } from './rootBridge';
 
 export interface ExportResult {
   success: boolean;
-  method: 'native-storage' | 'download' | 'share' | 'data-uri' | 'clipboard';
   message: string;
   path?: string;
 }
 
 /**
- * Ghi file trực tiếp vào bộ nhớ Android (/storage/emulated/0/Download/)
- * Ưu tiên gọi Native Plugin Java (sử dụng Android MediaStore API của Android 10-16, ghi thẳng không cần hỏi quyền)
- * Nếu chạy trên Web Browser: kích hoạt luồng tải tệp Blob / Data URI.
+ * Xuất tệp theo chuẩn Android Storage Access Framework (SAF)
+ * Mở trình quản lý tệp hệ thống Android để người dùng bấm Lưu vào bất kỳ thư mục nào
  */
-export async function saveToAndroidStorageMaster(
+export async function exportNovelStandard(
   filename: string,
   content: string
 ): Promise<ExportResult> {
-  // 1. Kiểm tra môi trường Native Android (Capacitor App)
+  // 1. Nếu đang chạy trên ứng dụng Android Native (Capacitor)
   if (typeof window !== 'undefined' && window.Capacitor?.Plugins?.RootBridge) {
-    const nativeRes = await RootBridge.saveFileToAndroid(filename, content);
-    if (nativeRes.success) {
+    const safRes = await RootBridge.exportWithSAF(filename, content);
+    if (safRes.success) {
       return {
         success: true,
-        method: 'native-storage',
-        path: nativeRes.path || `/storage/emulated/0/Download/${filename}`,
-        message: nativeRes.message || `Đã ghi thành công vào: /storage/emulated/0/Download/${filename}`,
+        message: safRes.message || 'Đã lưu tệp thành công!',
+        path: safRes.uri,
+      };
+    } else {
+      // Nếu người dùng đóng hoặc hủy
+      return {
+        success: false,
+        message: safRes.message || 'Bạn đã hủy lưu tệp.',
       };
     }
   }
 
-  // 2. Chế độ Web Browser / WebView: Kích hoạt tải trực tiếp bằng Blob
+  // 2. Nếu đang chạy trên Web Browser: Kích hoạt tải tệp chuẩn trình duyệt
   const blobOk = triggerDirectDownload(filename, content);
   if (blobOk) {
     return {
       success: true,
-      method: 'download',
-      path: `/storage/emulated/0/Download/${filename}`,
-      message: `Đã kích hoạt tải xuống tệp ${filename} vào thư mục /Download của thiết bị.`,
+      message: `Đã kích hoạt tải tệp ${filename} vào thư mục Download của trình duyệt!`,
     };
   }
 
-  // 3. Fallback Data URI
   const dataUriOk = triggerDataUriDownload(filename, content);
   if (dataUriOk) {
     return {
       success: true,
-      method: 'data-uri',
-      path: `/storage/emulated/0/Download/${filename}`,
-      message: `Đã tải tệp ${filename} qua Data URI vào thư mục Download của thiết bị.`,
+      message: `Đã tải tệp ${filename} qua Data URI!`,
     };
   }
 
   return {
     success: false,
-    method: 'download',
-    message: 'Không thể ghi tệp vào bộ nhớ trên trình duyệt này.',
+    message: 'Không thể kích hoạt tải tệp trên trình duyệt này.',
   };
 }
 
 /**
- * Tải file trực tiếp vào thư mục /storage/emulated/0/Download/ của Android
- * Tuyệt đối không dùng target="_blank" vì sẽ khiến Chrome Android hủy tải.
+ * Ghi thẳng vào /storage/emulated/0/Download/ không cần mở hộp thoại
+ */
+export async function saveDirectToDownloadFolder(
+  filename: string,
+  content: string
+): Promise<ExportResult> {
+  if (typeof window !== 'undefined' && window.Capacitor?.Plugins?.RootBridge) {
+    const res = await RootBridge.saveFileToAndroid(filename, content);
+    return {
+      success: res.success,
+      message: res.message,
+      path: res.path,
+    };
+  }
+
+  const ok = triggerDirectDownload(filename, content);
+  return {
+    success: ok,
+    message: ok ? `Đã gửi lệnh tải ${filename} vào thư mục Download của máy.` : 'Không thể tải tệp.',
+  };
+}
+
+/**
+ * Mở màn hình Cài đặt cấp quyền Tất Cả Tệp trên Android
+ */
+export async function openAndroidStorageSettings(): Promise<void> {
+  await RootBridge.requestAllFilesAccess();
+}
+
+/**
+ * Trình tải trực tiếp cho Web Browser
  */
 export function triggerDirectDownload(
   filename: string,
-  content: string,
-  mimeType: string = 'text/plain;charset=utf-8'
+  content: string
 ): boolean {
   try {
-    const blob = new Blob([content], { type: mimeType });
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -93,18 +118,17 @@ export function triggerDirectDownload(
 
     setTimeout(() => {
       URL.revokeObjectURL(url);
-    }, 300000);
+    }, 180000);
 
     return true;
   } catch (err) {
-    console.error('Lỗi khi kích hoạt direct download:', err);
+    console.error('Direct download error:', err);
     return false;
   }
 }
 
 /**
- * Tải qua Data URI - Phương thức dự phòng 100% thành công trên mọi máy Android
- * Không phụ thuộc vào Blob hay ObjectURL, ghi thẳng vào /Download
+ * Tải qua Data URI
  */
 export function triggerDataUriDownload(
   filename: string,
@@ -130,51 +154,7 @@ export function triggerDataUriDownload(
     document.body.removeChild(a);
     return true;
   } catch (err) {
-    console.error('Lỗi khi tải qua Data URI:', err);
+    console.error('Data URI download error:', err);
     return false;
   }
-}
-
-/**
- * Mở Hộp thoại Chia Sẻ / Lưu Tệp Gốc của Android (Native Android Share Sheet)
- */
-export async function triggerAndroidNativeShare(
-  filename: string,
-  content: string
-): Promise<ExportResult> {
-  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-
-  if (typeof navigator !== 'undefined' && 'share' in navigator) {
-    try {
-      const file = new File([blob], filename, {
-        type: 'text/plain',
-        lastModified: Date.now(),
-      });
-
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: filename,
-          text: `Bản dịch hoàn chỉnh: ${filename}`,
-        });
-        return {
-          success: true,
-          method: 'share',
-          message: 'Đã mở bảng lưu tệp Android. Bạn có thể chọn Lưu vào máy (Files) hoặc Drive/Zalo!',
-        };
-      }
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        return {
-          success: false,
-          method: 'share',
-          message: 'Bạn đã đóng hộp thoại chia sẻ.',
-        };
-      }
-      console.warn('Lỗi khi gọi navigator.share:', err);
-    }
-  }
-
-  // Tự động chuyển hướng ghi file
-  return await saveToAndroidStorageMaster(filename, content);
 }

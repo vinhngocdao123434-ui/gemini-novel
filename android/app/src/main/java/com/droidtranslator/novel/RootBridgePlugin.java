@@ -1,5 +1,7 @@
 package com.droidtranslator.novel;
 
+import android.Manifest;
+import android.app.Activity;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
@@ -11,11 +13,14 @@ import android.os.PowerManager;
 import android.os.Process;
 import android.provider.MediaStore;
 import android.provider.Settings;
+import androidx.activity.result.ActivityResult;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -24,10 +29,22 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 
-@CapacitorPlugin(name = "RootBridge")
+@CapacitorPlugin(
+    name = "RootBridge",
+    permissions = {
+        @Permission(
+            alias = "storage",
+            strings = {
+                Manifest.permission.READ_EXTERNAL_STORAGE,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            }
+        )
+    }
+)
 public class RootBridgePlugin extends Plugin {
 
     private PowerManager.WakeLock wakeLock = null;
+    private String pendingExportContent = "";
 
     private boolean isDeviceRooted() {
         String[] paths = {
@@ -200,9 +217,101 @@ public class RootBridgePlugin extends Plugin {
     }
 
     /**
+     * Mở màn hình Cài đặt Ứng dụng để người dùng cấp quyền bộ nhớ trực tiếp
+     */
+    @PluginMethod
+    public void openAppSettings(PluginCall call) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            Uri uri = Uri.fromParts("package", getContext().getPackageName(), null);
+            intent.setData(uri);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Không thể mở Cài đặt: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Yêu cầu cấp quyền "Truy cập tất cả các tệp" (Android 11-16 MANAGE_EXTERNAL_STORAGE)
+     */
+    @PluginMethod
+    public void requestAllFilesAccess(PluginCall call) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                if (!Environment.isExternalStorageManager()) {
+                    Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                    intent.setData(Uri.parse("package:" + getContext().getPackageName()));
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    getContext().startActivity(intent);
+                }
+            } else {
+                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                intent.setData(Uri.parse("package:" + getContext().getPackageName()));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(intent);
+            }
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Lỗi mở quyền quản lý tệp: " + e.getMessage());
+        }
+    }
+
+    /**
+     * CHUẨN ANDROID CHÍNH THỨC: Storage Access Framework (SAF)
+     * Kích hoạt hộp thoại hệ thống của Android (ACTION_CREATE_DOCUMENT)
+     * Cho phép người dùng chọn chính xác thư mục (Download, Documents, Thẻ nhớ SD...) và nhấn LƯU.
+     * Hoàn toàn không bao giờ bị lỗi từ chối quyền trên bất kỳ phiên bản Android nào!
+     */
+    @PluginMethod
+    public void exportWithSAF(PluginCall call) {
+        String filename = call.getString("filename", "novel_translated.txt");
+        String content = call.getString("content", "");
+        this.pendingExportContent = content;
+
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_TITLE, filename);
+
+        startActivityForResult(call, intent, "safCallback");
+    }
+
+    @ActivityCallback
+    private void safCallback(PluginCall call, ActivityResult result) {
+        if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
+            Uri uri = result.getData().getData();
+            if (uri != null) {
+                try {
+                    OutputStream os = getContext().getContentResolver().openOutputStream(uri);
+                    if (os != null) {
+                        os.write(pendingExportContent.getBytes(StandardCharsets.UTF_8));
+                        os.flush();
+                        os.close();
+                        JSObject ret = new JSObject();
+                        ret.put("success", true);
+                        ret.put("uri", uri.toString());
+                        ret.put("message", "Đã lưu tệp thành công vào vị trí bạn đã chọn!");
+                        call.resolve(ret);
+                        return;
+                    }
+                } catch (Exception e) {
+                    call.reject("Lỗi ghi tệp qua SAF: " + e.getMessage());
+                    return;
+                }
+            }
+        }
+        call.reject("Đã hủy lưu tệp.");
+    }
+
+    /**
      * Ghi file trực tiếp vào bộ nhớ Android (/storage/emulated/0/Download/)
-     * Sử dụng MediaStore API chuẩn của Android 10-16 (Không cần quyền hỏi phiền toái)
-     * Hoặc ghi trực tiếp bằng quyền Root / File API
+     * Sử dụng MediaStore API chuẩn của Android 10-16
      */
     @PluginMethod
     public void saveFileToAndroidStorage(PluginCall call) {
@@ -234,7 +343,7 @@ public class RootBridgePlugin extends Plugin {
                 }
             }
 
-            // 2. Android 9 trở xuống: Ghi trực tiếp vào thư mục Download công khai
+            // 2. Android 9 trở xuống hoặc khi đã có quyền All Files Access
             if (!written) {
                 File downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
                 if (!downloadDir.exists()) {
@@ -252,10 +361,10 @@ public class RootBridgePlugin extends Plugin {
             JSObject ret = new JSObject();
             ret.put("success", written);
             ret.put("path", savedPath);
-            ret.put("message", "Đã ghi thành công vào bộ nhớ máy: " + savedPath);
+            ret.put("message", "Đã ghi thành công vào: " + savedPath);
             call.resolve(ret);
         } catch (Exception e) {
-            // 3. Fallback bằng quyền Root nếu dính SELinux / Permission denied
+            // 3. Fallback bằng quyền Root nếu dính lỗi bảo mật
             if (isDeviceRooted()) {
                 try {
                     File tempFile = new File(getContext().getCacheDir(), filename);

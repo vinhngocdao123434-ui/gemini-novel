@@ -27,6 +27,9 @@ declare global {
           releaseWakeLock: () => Promise<any>;
           requestBatteryOptimizationExemption: () => Promise<any>;
           saveFileToAndroidStorage: (options: { filename: string; content: string }) => Promise<{ success: boolean; path: string; message: string }>;
+          exportWithSAF: (options: { filename: string; content: string }) => Promise<{ success: boolean; uri?: string; message: string }>;
+          openAppSettings: () => Promise<any>;
+          requestAllFilesAccess: () => Promise<any>;
         };
       };
     };
@@ -198,5 +201,52 @@ export const RootBridge = {
       success: false,
       message: 'Không phát hiện Native Capacitor Bridge (đang chạy trên Web Browser).',
     };
+  },
+
+  /**
+   * Lưu tệp bằng Trình Quản Lý Tệp Chuẩn của Android (SAF - Intent.ACTION_CREATE_DOCUMENT)
+   */
+  async exportWithSAF(filename: string, content: string): Promise<{ success: boolean; uri?: string; message: string }> {
+    const plugin = window.Capacitor?.Plugins?.RootBridge;
+    if (plugin?.exportWithSAF) {
+      try {
+        const res = await plugin.exportWithSAF({ filename, content });
+        return {
+          success: !!res.success,
+          uri: res.uri,
+          message: res.message || 'Đã lưu tệp thành công!',
+        };
+      } catch (e: any) {
+        return {
+          success: false,
+          message: e?.message || 'Đã hủy lưu tệp.',
+        };
+      }
+    }
+
+    return {
+      success: false,
+      message: 'Không phát hiện Native Capacitor Bridge.',
+    };
+  },
+
+  /**
+   * Mở màn hình Cài đặt Ứng dụng Android (App Info Settings)
+   */
+  async openAppSettings(): Promise<void> {
+    const plugin = window.Capacitor?.Plugins?.RootBridge;
+    if (plugin?.openAppSettings) {
+      await plugin.openAppSettings();
+    }
+  },
+
+  /**
+   * Mở màn hình cấp quyền Quyền Quản Lý Tất Cả Tệp (MANAGE_EXTERNAL_STORAGE)
+   */
+  async requestAllFilesAccess(): Promise<void> {
+    const plugin = window.Capacitor?.Plugins?.RootBridge;
+    if (plugin?.requestAllFilesAccess) {
+      await plugin.requestAllFilesAccess();
+    }
   },
 };
