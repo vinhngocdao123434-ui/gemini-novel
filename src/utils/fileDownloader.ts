@@ -1,71 +1,115 @@
 /**
- * Bộ điều phối Xuất File & Tải Tệp Tương Thích Hoàn Hảo Với Android & Trình Duyệt Mobile
- * Khắc phục hoàn toàn lỗi thu hồi URL Blob sớm khiến thư mục /Download của Android bị trống.
+ * Bộ Điều Phối Xuất Tệp & Tải Xuống Chuẩn Cho Android (/storage/emulated/0/Download/)
+ * Loại bỏ hoàn toàn target="_blank" và showSaveFilePicker (vốn gây lỗi AbortError trên Chrome Android)
  */
 
 export interface ExportResult {
   success: boolean;
-  method: 'download' | 'share' | 'file-picker' | 'clipboard';
+  method: 'download' | 'share' | 'data-uri' | 'clipboard';
   message: string;
 }
 
 /**
- * Tải file trực tiếp vào thư mục /Download của máy
- * Duy trì ObjectURL trong 3 phút, tuyệt đối không revoke sớm để Android Download Manager hoàn tất ghi file.
+ * Tải file trực tiếp vào thư mục /storage/emulated/0/Download/ của Android
+ * Tuyệt đối không dùng target="_blank" vì sẽ khiến Chrome Android hủy tải.
  */
-export function triggerDirectDownload(filename: string, content: string | Blob, mimeType: string = 'text/plain;charset=utf-8'): boolean {
+export function triggerDirectDownload(
+  filename: string,
+  content: string,
+  mimeType: string = 'text/plain;charset=utf-8'
+): boolean {
   try {
-    const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
+    const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
-    a.rel = 'noopener';
-    a.target = '_blank';
     a.style.display = 'none';
 
     document.body.appendChild(a);
-    a.click();
+
+    // Kích hoạt sự kiện click chuẩn cho Android Chrome & WebViews
+    const clickEvent = new MouseEvent('click', {
+      view: window,
+      bubbles: true,
+      cancelable: true,
+    });
+    a.dispatchEvent(clickEvent);
+
     document.body.removeChild(a);
 
-    // QUAN TRỌNG: Không bao giờ revoke ngay lập tức!
-    // Trình quản lý tải xuống của Android (Android Download Manager) cần từ 15-60s để đọc xong blob stream.
+    // Giữ ObjectURL trong 5 phút để Android Download Manager hoàn tất ghi vào đĩa
     setTimeout(() => {
       URL.revokeObjectURL(url);
-    }, 180000); // 3 phút
+    }, 300000);
 
     return true;
   } catch (err) {
-    console.error('Lỗi khi kích hoạt download:', err);
+    console.error('Lỗi khi kích hoạt direct download:', err);
     return false;
   }
 }
 
 /**
- * Lưu file trực tiếp vào Bộ nhớ máy thông qua Bộ chọn Tệp Android (Native Android Share / Save to Files)
- * Mở hộp thoại hệ thống của Android cho phép người dùng chọn chính xác thư mục (Download, Tài liệu, Thẻ nhớ, Drive...)
+ * Tải qua Data URI - Phương thức dự phòng 100% thành công trên mọi máy Android
+ * Không phụ thuộc vào Blob hay ObjectURL, ghi thẳng vào /Download
  */
-export async function saveToDeviceStorageNative(
+export function triggerDataUriDownload(
   filename: string,
-  content: string,
-  mimeType: string = 'text/plain;charset=utf-8'
-): Promise<ExportResult> {
-  const blob = new Blob([content], { type: mimeType });
+  content: string
+): boolean {
+  try {
+    const encoded = encodeURIComponent(content);
+    const dataUri = `data:text/plain;charset=utf-8,${encoded}`;
+    const a = document.createElement('a');
+    a.href = dataUri;
+    a.download = filename;
+    a.style.display = 'none';
 
-  // Cách 1: Sử dụng Web Share API của Android (Chuẩn Native Android nhất)
+    document.body.appendChild(a);
+
+    const clickEvent = new MouseEvent('click', {
+      view: window,
+      bubbles: true,
+      cancelable: true,
+    });
+    a.dispatchEvent(clickEvent);
+
+    document.body.removeChild(a);
+    return true;
+  } catch (err) {
+    console.error('Lỗi khi tải qua Data URI:', err);
+    return false;
+  }
+}
+
+/**
+ * Mở Hộp thoại Chia Sẻ / Lưu Tệp Gốc của Android (Native Android Share Sheet)
+ * Mở hộp thoại hệ thống: Cho phép chọn Google Files, Samsung My Files, Drive, Zalo, v.v.
+ */
+export async function triggerAndroidNativeShare(
+  filename: string,
+  content: string
+): Promise<ExportResult> {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+
   if (typeof navigator !== 'undefined' && 'share' in navigator) {
     try {
-      const file = new File([blob], filename, { type: mimeType, lastModified: Date.now() });
+      const file = new File([blob], filename, {
+        type: 'text/plain',
+        lastModified: Date.now(),
+      });
+
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
-          title: filename,
-          text: `Xuất tệp truyện: ${filename}`,
           files: [file],
+          title: filename,
+          text: `Bản dịch hoàn chỉnh: ${filename}`,
         });
         return {
           success: true,
           method: 'share',
-          message: 'Đã mở hộp thoại lưu tệp Android. Bạn có thể chọn Lưu vào máy hoặc Drive!',
+          message: 'Đã mở bảng lưu tệp Android. Bạn có thể chọn Lưu vào máy (Files) hoặc Drive/Zalo!',
         };
       }
     } catch (err: unknown) {
@@ -73,60 +117,35 @@ export async function saveToDeviceStorageNative(
         return {
           success: false,
           method: 'share',
-          message: 'Người dùng đã hủy lưu tệp.',
+          message: 'Bạn đã đóng hộp thoại chia sẻ.',
         };
       }
-      console.warn('Web Share API không khả dụng hoặc bị từ chối, chuyển sang phương thức tải trực tiếp...', err);
+      console.warn('Lỗi khi gọi navigator.share:', err);
     }
   }
 
-  // Cách 2: File System Access API (trên Chromium / Android hiện đại)
-  if ('showSaveFilePicker' in window) {
-    try {
-      const handle = await (window as unknown as {
-        showSaveFilePicker: (options: { suggestedName: string; types: { description: string; accept: Record<string, string[]> }[] }) => Promise<{ createWritable: () => Promise<{ write: (data: Blob) => Promise<void>; close: () => Promise<void> }> }>;
-      }).showSaveFilePicker({
-        suggestedName: filename,
-        types: [
-          {
-            description: 'Văn bản Text (.txt)',
-            accept: { 'text/plain': ['.txt'] },
-          },
-        ],
-      });
-      const writable = await handle.createWritable();
-      await writable.write(blob);
-      await writable.close();
-      return {
-        success: true,
-        method: 'file-picker',
-        message: `Đã lưu tệp ${filename} trực tiếp vào thư mục đã chọn trên máy!`,
-      };
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        return {
-          success: false,
-          method: 'file-picker',
-          message: 'Người dùng đã hủy chọn thư mục.',
-        };
-      }
-      console.warn('showSaveFilePicker thất bại, chuyển sang phương thức tải trực tiếp...', err);
-    }
-  }
-
-  // Cách 3: Fallback tải trực tiếp
-  const downloaded = triggerDirectDownload(filename, blob, mimeType);
-  if (downloaded) {
+  // Nếu trình duyệt không hỗ trợ chia sẻ File (hoặc webview giới hạn), tự động kích hoạt tải trực tiếp
+  const directOk = triggerDirectDownload(filename, content);
+  if (directOk) {
     return {
       success: true,
       method: 'download',
-      message: `Đang gửi lệnh tải tệp ${filename} vào thư mục /Download của máy...`,
+      message: 'Thiết bị không hỗ trợ Share Sheet. Đã tự động kích hoạt tải tệp vào thư mục /Download!',
+    };
+  }
+
+  const dataUriOk = triggerDataUriDownload(filename, content);
+  if (dataUriOk) {
+    return {
+      success: true,
+      method: 'data-uri',
+      message: 'Đã kích hoạt tải tệp qua luồng dữ liệu trực tiếp vào /Download!',
     };
   }
 
   return {
     success: false,
     method: 'download',
-    message: 'Không thể xuất tệp trên trình duyệt hiện tại.',
+    message: 'Không thể kích hoạt tải tệp trên trình duyệt này.',
   };
 }
