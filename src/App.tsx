@@ -40,6 +40,7 @@ import { FullGlossaryModal } from './components/FullGlossaryModal';
 import { PromptModal } from './components/PromptModal';
 import { ProjectModal } from './components/ProjectModal';
 import { EditGlossaryModal } from './components/EditGlossaryModal';
+import { ExportNovelModal } from './components/ExportNovelModal';
 
 export const App: React.FC = () => {
   // Global States
@@ -71,6 +72,7 @@ export const App: React.FC = () => {
   const [editingPrompt, setEditingPrompt] = useState<PromptCardItem | null | undefined>(undefined);
   const [projectModalMode, setProjectModalMode] = useState<'switch' | 'new' | null>(null);
   const [editingGlossaryPair, setEditingGlossaryPair] = useState<{ raw: string; vi: string } | null>(null);
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
 
   // Double Back to Exit Toast State
   const [showExitToast, setShowExitToast] = useState<boolean>(false);
@@ -89,6 +91,7 @@ export const App: React.FC = () => {
   const projectModalModeRef = useRef(projectModalMode);
   const editingPromptRef = useRef(editingPrompt);
   const editingGlossaryPairRef = useRef(editingGlossaryPair);
+  const isExportModalOpenRef = useRef(isExportModalOpen);
   const activeTabRef = useRef(activeTab);
   const lastBackPressTimeRef = useRef<number>(0);
   const exitToastTimeoutRef = useRef<number | null>(null);
@@ -100,8 +103,17 @@ export const App: React.FC = () => {
     projectModalModeRef.current = projectModalMode;
     editingPromptRef.current = editingPrompt;
     editingGlossaryPairRef.current = editingGlossaryPair;
+    isExportModalOpenRef.current = isExportModalOpen;
     activeTabRef.current = activeTab;
-  }, [readerChapterIndex, isFullGlossaryOpen, projectModalMode, editingPrompt, editingGlossaryPair, activeTab]);
+  }, [
+    readerChapterIndex,
+    isFullGlossaryOpen,
+    projectModalMode,
+    editingPrompt,
+    editingGlossaryPair,
+    isExportModalOpen,
+    activeTab,
+  ]);
 
   // Sync refs & persist
   useEffect(() => {
@@ -128,6 +140,11 @@ export const App: React.FC = () => {
   // CORE ANDROID BACK ENGINE (EDGE GESTURE + POPSTATE + DOUBLE-BACK TO EXIT)
   // =========================================================================
   const executeBackAction = (): boolean => {
+    // 0. Nếu đang mở Modal Xuất file toàn văn -> Đóng Modal
+    if (isExportModalOpenRef.current) {
+      setIsExportModalOpen(false);
+      return true;
+    }
     // 1. Nếu đang mở Trình đọc Full màn hình -> Đóng Trình đọc
     if (readerChapterIndexRef.current !== null) {
       setReaderChapterIndex(null);
@@ -285,6 +302,7 @@ export const App: React.FC = () => {
     setProjectModalMode(null);
     setEditingPrompt(undefined);
     setEditingGlossaryPair(null);
+    setIsExportModalOpen(false);
   };
 
   const addLog = (text: string, type: 'info' | 'success' | 'warning' | 'error' | 'ai' = 'info') => {
@@ -782,44 +800,15 @@ export const App: React.FC = () => {
     addLog(`✅ Đã hoàn tất dịch lại Chương ${chapIndex + 1}!`, 'success');
   };
 
-  // Export Full Novel
+  // Export Full Novel Modal
   const handleExportFullNovel = () => {
-    const transKeys = Object.keys(projectData.translatedChapters)
-      .map(Number)
-      .sort((a, b) => a - b);
-
+    const transKeys = Object.keys(projectData.translatedChapters);
     if (transKeys.length === 0) {
       alert('Chưa có chương nào được dịch để xuất!');
       return;
     }
-
-    const nl = '\n';
-    let fullText = `=== TOÀN VĂN TÁC PHẨM: ${projectData.projectName} ===${nl}`;
-    fullText += `Biên dịch bởi: DroidTranslator Native${nl}`;
-    fullText += `Mô hình: ${settings.currentModel}${nl}`;
-    fullText += `Tổng số chương đã dịch: ${transKeys.length}${nl}${nl}`;
-
-    for (const idx of transKeys) {
-      fullText += `============================================================${nl}`;
-      fullText += projectData.translatedChapters[idx] + nl + nl;
-    }
-
-    // Trigger download
-    const blob = new Blob([fullText], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${projectData.projectName}_FULL_TRANSLATED.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    navigator.clipboard.writeText(fullText);
-    addLog(`📁 Đã xuất và tải xuống tệp: ${projectData.projectName}_FULL_TRANSLATED.txt`, 'success');
-    alert(
-      `Đã xuất toàn văn tác phẩm ${transKeys.length} chương thành công! File đã được tải xuống và nội dung đã sao chép vào Clipboard.`
-    );
+    window.history.pushState({ modal: 'exportNovel' }, '');
+    setIsExportModalOpen(true);
   };
 
   // Download Full Source Code Zip
@@ -1049,6 +1038,16 @@ export const App: React.FC = () => {
           onClose={handleCloseActiveModal}
           onSelectProject={handleSelectProject}
           onCreateProject={handleCreateProject}
+        />
+      )}
+
+      {/* Export Novel To Storage Modal */}
+      {isExportModalOpen && (
+        <ExportNovelModal
+          projectData={projectData}
+          modelName={settings.currentModel}
+          onClose={handleCloseActiveModal}
+          onAddLog={(text, type) => addLog(text, type)}
         />
       )}
 

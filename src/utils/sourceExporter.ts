@@ -272,6 +272,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     'src/utils/sinoVietnameseDictionary.ts',
     'src/utils/chapterAuditor.ts',
     'src/utils/fileParser.ts',
+    'src/utils/fileDownloader.ts',
     'src/utils/storage.ts',
     'src/utils/rootBridge.ts',
     'src/utils/sourceExporter.ts',
@@ -286,6 +287,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     'src/components/PromptModal.tsx',
     'src/components/ProjectModal.tsx',
     'src/components/EditGlossaryModal.tsx',
+    'src/components/ExportNovelModal.tsx',
     'src/App.tsx',
   ];
 
@@ -305,5 +307,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+
+  // Không revoke ngay lập tức để Android kịp ghi file vào máy
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 180000);
 }
