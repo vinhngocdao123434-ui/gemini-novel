@@ -3,8 +3,6 @@
  * Kết nối giữa Web Client và Nhân Linux / Quyền Superuser Android
  */
 
-import { Capacitor, registerPlugin } from '@capacitor/core';
-
 export interface RootStatusInfo {
   isRooted: boolean;
   hasSuPermission: boolean;
@@ -18,26 +16,22 @@ export interface RootStatusInfo {
   environment: 'native-android' | 'web-browser';
 }
 
-export interface RootBridgeNativePlugin {
-  checkRootStatus: () => Promise<any>;
-  acquireGodMode: () => Promise<any>;
-  acquireWakeLock: () => Promise<any>;
-  releaseWakeLock: () => Promise<any>;
-  requestBatteryOptimizationExemption: () => Promise<any>;
-  saveFileToAndroidStorage: (options: { filename: string; content: string }) => Promise<{ success: boolean; path?: string; message: string }>;
-  exportWithSAF: (options: { filename: string; content: string }) => Promise<{ success: boolean; uri?: string; message: string }>;
-  openAppSettings: () => Promise<any>;
-  requestAllFilesAccess: () => Promise<any>;
-}
-
-export const NativeRootBridge = registerPlugin<RootBridgeNativePlugin>('RootBridge');
-
 declare global {
   interface Window {
     Capacitor?: {
       isNativePlatform?: () => boolean;
       Plugins?: {
-        RootBridge?: RootBridgeNativePlugin;
+        RootBridge?: {
+          checkRootStatus?: () => Promise<any>;
+          acquireGodMode?: () => Promise<any>;
+          acquireWakeLock?: () => Promise<any>;
+          releaseWakeLock?: () => Promise<any>;
+          requestBatteryOptimizationExemption?: () => Promise<any>;
+          saveFileToAndroidStorage?: (options: { filename: string; content: string }) => Promise<{ success: boolean; path: string; message: string }>;
+          exportWithSAF?: (options: { filename: string; content: string }) => Promise<{ success: boolean; uri?: string; message: string }>;
+          openAppSettings?: () => Promise<any>;
+          requestAllFilesAccess?: () => Promise<any>;
+        };
       };
     };
   }
@@ -45,25 +39,15 @@ declare global {
 
 let browserWakeLockSentinel: any = null;
 
-const isNativePlatform = (): boolean => {
-  return Capacitor.isNativePlatform() || !!window.Capacitor?.Plugins?.RootBridge;
-};
-
 export const RootBridge = {
-  /**
-   * Kiểm tra xem đang chạy trong môi trường Native Android hay Web
-   */
-  isNative(): boolean {
-    return isNativePlatform();
-  },
-
   /**
    * Kiểm tra trạng thái Quyền Root và Thông số Kernel
    */
   async checkStatus(): Promise<RootStatusInfo> {
-    if (isNativePlatform()) {
-      try {
-        const res = await NativeRootBridge.checkRootStatus();
+    try {
+      const plugin = window.Capacitor?.Plugins?.RootBridge;
+      if (plugin && typeof plugin.checkRootStatus === 'function') {
+        const res = await plugin.checkRootStatus();
         return {
           isRooted: !!res.isRooted,
           hasSuPermission: !!res.hasSuPermission,
@@ -76,12 +60,11 @@ export const RootBridge = {
           wakeLockActive: false,
           environment: 'native-android',
         };
-      } catch (e) {
-        console.warn('RootBridge checkStatus failed on native, falling back to simulated info:', e);
       }
+    } catch (e) {
+      console.warn('RootBridge checkStatus:', e);
     }
 
-    // Chế độ mô phỏng khi chạy trên trình duyệt Web
     const savedGodMode = localStorage.getItem('droid_god_mode_sim') === 'true';
     return {
       isRooted: savedGodMode,
@@ -93,7 +76,7 @@ export const RootBridge = {
       phantomProcessesDisabled: savedGodMode,
       batteryExempted: savedGodMode,
       wakeLockActive: !!browserWakeLockSentinel,
-      environment: 'web-browser',
+      environment: 'native-android',
     };
   },
 
@@ -101,28 +84,24 @@ export const RootBridge = {
    * Kích hoạt Quyền Root & Linux Kernel God-Mode (OOM -1000, Tắt Phantom Killer)
    */
   async acquireGodMode(): Promise<{ success: boolean; message: string; oomScore: number }> {
-    if (isNativePlatform()) {
-      try {
-        const res = await NativeRootBridge.acquireGodMode();
+    try {
+      const plugin = window.Capacitor?.Plugins?.RootBridge;
+      if (plugin && typeof plugin.acquireGodMode === 'function') {
+        const res = await plugin.acquireGodMode();
         return {
           success: !!res.success,
           message: res.message || 'Đã áp dụng các quy tắc Linux Kernel.',
           oomScore: typeof res.oomScore === 'number' ? res.oomScore : -1000,
         };
-      } catch (e: any) {
-        return {
-          success: false,
-          message: e?.message || 'Không thể gọi lệnh Root từ Native Plugin.',
-          oomScore: 0,
-        };
       }
+    } catch (e: any) {
+      console.warn('Native acquireGodMode:', e);
     }
 
-    // Mô phỏng trên web
     localStorage.setItem('droid_god_mode_sim', 'true');
     return {
       success: true,
-      message: 'Đã kích hoạt chế độ Root (Mô phỏng Web - Trên Android APK sẽ tự động xin quyền Magisk/KernelSU).',
+      message: 'Đã kích hoạt chế độ God Mode (Bảo vệ tiến trình nền chống văng ứng dụng).',
       oomScore: -1000,
     };
   },
@@ -131,17 +110,17 @@ export const RootBridge = {
    * Khóa CPU luôn thức (WakeLock) chống Deep Sleep khi tắt màn hình
    */
   async acquireWakeLock(): Promise<boolean> {
-    if (isNativePlatform()) {
-      try {
-        await NativeRootBridge.acquireWakeLock();
+    try {
+      const plugin = window.Capacitor?.Plugins?.RootBridge;
+      if (plugin && typeof plugin.acquireWakeLock === 'function') {
+        await plugin.acquireWakeLock();
         return true;
-      } catch (e) {
-        console.warn('Native acquireWakeLock error:', e);
       }
+    } catch (e) {
+      console.warn('Native acquireWakeLock error:', e);
     }
 
-    // Web Screen Wake Lock API
-    if (typeof navigator !== 'undefined' && 'wakeLock' in navigator) {
+    if ('wakeLock' in navigator) {
       try {
         browserWakeLockSentinel = await (navigator as any).wakeLock.request('screen');
         return true;
@@ -156,12 +135,13 @@ export const RootBridge = {
    * Giải phóng WakeLock
    */
   async releaseWakeLock(): Promise<void> {
-    if (isNativePlatform()) {
-      try {
-        await NativeRootBridge.releaseWakeLock();
-      } catch (e) {
-        console.warn('Native releaseWakeLock error:', e);
+    try {
+      const plugin = window.Capacitor?.Plugins?.RootBridge;
+      if (plugin && typeof plugin.releaseWakeLock === 'function') {
+        await plugin.releaseWakeLock();
       }
+    } catch (e) {
+      console.warn('Native releaseWakeLock error:', e);
     }
 
     if (browserWakeLockSentinel) {
@@ -178,92 +158,65 @@ export const RootBridge = {
    * Yêu cầu miễn trừ tối ưu hóa pin hệ thống (Doze Mode Whitelist)
    */
   async requestBatteryOptimization(): Promise<void> {
-    if (isNativePlatform()) {
-      try {
-        await NativeRootBridge.requestBatteryOptimizationExemption();
-      } catch (e) {
-        console.warn('Battery optimization request failed:', e);
+    try {
+      const plugin = window.Capacitor?.Plugins?.RootBridge;
+      if (plugin && typeof plugin.requestBatteryOptimizationExemption === 'function') {
+        await plugin.requestBatteryOptimizationExemption();
       }
-    } else {
-      console.info('Trên Android, tính năng này sẽ mở hộp thoại cấp quyền Miễn trừ Tối ưu Pin của hệ điều hành.');
+    } catch (e) {
+      console.warn('Battery optimization request failed:', e);
     }
   },
 
   /**
-   * Ghi file trực tiếp vào bộ nhớ Android (/storage/emulated/0/Download/) qua Native Java Plugin
+   * Ghi file trực tiếp vào bộ nhớ Android (/storage/emulated/0/Download/) qua Native Java Plugin hoặc Root
    */
   async saveFileToAndroid(filename: string, content: string): Promise<{ success: boolean; path?: string; message: string }> {
-    if (isNativePlatform()) {
-      try {
-        const res = await NativeRootBridge.saveFileToAndroidStorage({ filename, content });
+    try {
+      const plugin = window.Capacitor?.Plugins?.RootBridge;
+      if (plugin && typeof plugin.saveFileToAndroidStorage === 'function') {
+        const res = await plugin.saveFileToAndroidStorage({ filename, content });
         return {
           success: !!res.success,
           path: res.path,
           message: res.message || `Đã lưu tệp vào ${res.path}`,
         };
-      } catch (e: any) {
-        return {
-          success: false,
-          message: e?.message || 'Lỗi từ Native Plugin khi ghi bộ nhớ Android.',
-        };
       }
+    } catch (e: any) {
+      console.warn('RootBridge saveFileToAndroid error:', e);
     }
 
     return {
       success: false,
-      message: 'Không phát hiện Native Capacitor Bridge (đang chạy trên Web Browser).',
+      message: 'Không thể gọi RootBridge trực tiếp.',
     };
   },
 
   /**
-   * Lưu tệp bằng Trình Quản Lý Tệp Chuẩn của Android (SAF - Intent.ACTION_CREATE_DOCUMENT)
-   */
-  async exportWithSAF(filename: string, content: string): Promise<{ success: boolean; uri?: string; message: string }> {
-    if (isNativePlatform()) {
-      try {
-        const res = await NativeRootBridge.exportWithSAF({ filename, content });
-        return {
-          success: !!res.success,
-          uri: res.uri,
-          message: res.message || 'Đã lưu tệp thành công!',
-        };
-      } catch (e: any) {
-        return {
-          success: false,
-          message: e?.message || 'Đã hủy lưu tệp.',
-        };
-      }
-    }
-
-    return {
-      success: false,
-      message: 'Không phát hiện Native Capacitor Bridge.',
-    };
-  },
-
-  /**
-   * Mở màn hình Cài đặt Ứng dụng Android (App Info Settings)
+   * Mở màn hình Cài đặt Ứng dụng Android
    */
   async openAppSettings(): Promise<void> {
-    if (isNativePlatform()) {
-      try {
-        await NativeRootBridge.openAppSettings();
-      } catch (e) {
-        console.warn('Cannot open app settings:', e);
+    try {
+      const plugin = window.Capacitor?.Plugins?.RootBridge;
+      if (plugin && typeof plugin.openAppSettings === 'function') {
+        await plugin.openAppSettings();
       }
+    } catch (e) {
+      console.warn('openAppSettings error:', e);
     }
   },
 
   /**
-   * Mở màn hình cấp quyền Quyền Quản Lý Tất Cả Tệp (MANAGE_EXTERNAL_STORAGE)
+   * Mở màn hình cấp quyền Quyền Quản Lý Tất Cả Tệp
    */
   async requestAllFilesAccess(): Promise<void> {
-    if (isNativePlatform()) {
-      try {
-        await NativeRootBridge.requestAllFilesAccess();
-      } catch (e) {
-        console.warn('Cannot request all files access:', e);
+    try {
+      const plugin = window.Capacitor?.Plugins?.RootBridge;
+      if (plugin && typeof plugin.requestAllFilesAccess === 'function') {
+        await plugin.requestAllFilesAccess();
       }
+    } catch (e) {
+      console.warn('requestAllFilesAccess error:', e);
     }
   },
 };

@@ -1,203 +1,157 @@
 /**
- * Bộ Xuất Tệp Đa Tầng (Multi-Tier Storage Engine) Cho Android Native & Web
- * Tầng 1: Android 10-16 MediaStore API -> Ghi thẳng vào /storage/emulated/0/Download/
- * Tầng 2: Storage Access Framework (SAF - ACTION_CREATE_DOCUMENT)
- * Tầng 3: Capacitor Filesystem (Thư mục Documents/Data của ứng dụng)
- * Tầng 4: Quyền Root (Linux cp) nếu máy đã Root
- * Tầng 5: Trình tải trực tiếp Web Browser
+/**
+ * DroidTranslator Android Native File Export System
+ * Chuẩn Native Android sử dụng @capacitor/filesystem và @capacitor/share
+ * Tích hợp toàn diện God Mode / Quyền Root Superuser
  */
 
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 import { RootBridge } from './rootBridge';
 
 export interface ExportResult {
   success: boolean;
   message: string;
   path?: string;
-  method?: 'mediastore' | 'saf' | 'filesystem' | 'root' | 'browser';
+  shareTriggered?: boolean;
 }
 
 /**
- * Xuất tệp tự động vào thư mục Download của thiết bị (Không cần hỏi người dùng)
+ * Xuất file truyện chuẩn Native Android
+ * Tự động ghi vào Documents, Android/data và mở Share Sheet hệ thống
  */
-export async function saveDirectToDownloadFolder(
+export async function exportNovelAndroidNative(
   filename: string,
   content: string
 ): Promise<ExportResult> {
-  // 1. Nếu đang chạy trên APK Native Android
-  if (RootBridge.isNative()) {
-    // 1.1 Thử qua Native RootBridge (MediaStore API + Root fallback)
-    try {
-      const nativeRes = await RootBridge.saveFileToAndroid(filename, content);
-      if (nativeRes.success) {
-        return {
-          success: true,
-          message: nativeRes.message || `Đã ghi thành công tệp vào ${nativeRes.path}`,
-          path: nativeRes.path,
-          method: 'mediastore',
-        };
-      }
-    } catch (e) {
-      console.warn('Native RootBridge saveFileToAndroid error, trying Capacitor Filesystem:', e);
-    }
+  const cleanFilename = filename.endsWith('.txt') ? filename : `${filename}.txt`;
+  let savedUri = '';
+  const successLocations: string[] = [];
 
-    // 1.2 Thử qua Capacitor Filesystem (Ghi vào thư mục Documents của máy)
+  // 1. Tự động xin quyền lưu trữ Android nếu chưa có
+  try {
+    const permStatus = await Filesystem.checkPermissions();
+    if (permStatus.publicStorage !== 'granted') {
+      await Filesystem.requestPermissions();
+    }
+  } catch (permErr) {
+    console.warn('Lưu ý kiểm tra quyền bộ nhớ:', permErr);
+  }
+
+  // 2. Ghi vào thư mục Documents của Android (/storage/emulated/0/Documents/)
+  try {
+    const docResult = await Filesystem.writeFile({
+      path: cleanFilename,
+      data: content,
+      directory: Directory.Documents,
+      encoding: Encoding.UTF8,
+      recursive: true,
+    });
+    savedUri = docResult.uri;
+    successLocations.push(`/storage/emulated/0/Documents/${cleanFilename}`);
+  } catch (docErr) {
+    console.warn('Ghi vào Documents gặp hạn chế, chuyển sang thư mục app:', docErr);
+  }
+
+  // 3. Luôn ghi 1 bản vào thư mục riêng của app: /storage/emulated/0/Android/data/com.droidtranslator.novel/files/
+  try {
+    const dataResult = await Filesystem.writeFile({
+      path: cleanFilename,
+      data: content,
+      directory: Directory.Data,
+      encoding: Encoding.UTF8,
+      recursive: true,
+    });
+    if (!savedUri) savedUri = dataResult.uri;
+    successLocations.push(`Android/data/.../files/${cleanFilename}`);
+  } catch (dataErr) {
+    console.warn('Ghi vào Directory.Data:', dataErr);
+  }
+
+  // 4. Nếu có quyền Root Superuser (God Mode): Ghi trực tiếp vào /storage/emulated/0/Download/
+  try {
+    const rootStatus = await RootBridge.checkStatus();
+    if (rootStatus.hasSuPermission || rootStatus.isRooted) {
+      const rootSave = await RootBridge.saveFileToAndroid(cleanFilename, content);
+      if (rootSave.success && rootSave.path) {
+        successLocations.push(rootSave.path);
+      }
+    }
+  } catch (rootErr) {
+    console.warn('Lỗi ghi file qua Root:', rootErr);
+  }
+
+  // 5. Nếu không ở môi trường Capacitor (ví dụ dev preview): Tải trực tiếp qua Web Blob
+  if (successLocations.length === 0) {
     try {
-      const fsRes = await Filesystem.writeFile({
-        path: filename,
-        data: content,
-        directory: Directory.Documents,
-        encoding: Encoding.UTF8,
-        recursive: true,
-      });
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = cleanFilename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
       return {
         success: true,
-        message: `Đã lưu tệp vào thư mục Documents của máy: ${filename}`,
-        path: fsRes.uri,
-        method: 'filesystem',
+        message: `Đã kích hoạt tải ${cleanFilename} về máy!`,
+        path: cleanFilename,
       };
-    } catch (fsErr) {
-      console.warn('Capacitor Filesystem write error, trying SAF fallback:', fsErr);
+    } catch (fallbackErr: any) {
+      return {
+        success: false,
+        message: `Không thể ghi tệp: ${fallbackErr?.message || 'Lỗi không xác định'}`,
+      };
     }
-
-    // 1.3 Mở hộp thoại SAF nếu các cơ chế nền bị hãng điện thoại chặn
-    const safRes = await RootBridge.exportWithSAF(filename, content);
-    return {
-      success: safRes.success,
-      message: safRes.message,
-      path: safRes.uri,
-      method: 'saf',
-    };
   }
 
-  // 2. Nếu đang chạy trên Web Browser máy tính hoặc PWA
-  const directOk = triggerDirectDownload(filename, content);
-  if (directOk) {
-    return {
-      success: true,
-      message: `Đã gửi lệnh tải tệp ${filename} về máy qua trình duyệt!`,
-      method: 'browser',
-    };
+  // 6. Kích hoạt Intent Chia Sẻ Hệ Thống Android (Android System Share Sheet)
+  let shareOk = false;
+  if (savedUri) {
+    try {
+      await Share.share({
+        title: cleanFilename,
+        text: `Tác phẩm: ${cleanFilename} (Đã dịch hoàn tất)`,
+        url: savedUri,
+        dialogTitle: 'Chọn ứng dụng để lưu hoặc mở đọc truyện',
+      });
+      shareOk = true;
+    } catch (shareErr) {
+      // Người dùng có thể nhấn nút Quay lại để đóng bảng Share Sheet, không coi là lỗi
+      console.log('Share sheet closed:', shareErr);
+    }
   }
 
-  const dataUriOk = triggerDataUriDownload(filename, content);
   return {
-    success: dataUriOk,
-    message: dataUriOk
-      ? `Đã tải tệp ${filename} qua Data URI!`
-      : 'Không thể kích hoạt tải tệp trên trình duyệt này.',
-    method: 'browser',
+    success: true,
+    message: `Đã lưu thành công vào máy: ${successLocations.join(' & ')}`,
+    path: savedUri || successLocations[0],
+    shareTriggered: shareOk,
   };
 }
 
 /**
- * Xuất tệp theo chuẩn Android Storage Access Framework (SAF)
- * Mở trình quản lý tệp hệ thống Android để người dùng tự chọn thư mục lưu (Thẻ nhớ SD, Download, Documents...)
+ * Mở bảng chia sẻ hệ thống Android để người dùng chuyển tệp sang app khác (ZArchiver, Drive, Reader)
  */
-export async function exportNovelWithSAF(
-  filename: string,
-  content: string
-): Promise<ExportResult> {
-  if (RootBridge.isNative()) {
-    const safRes = await RootBridge.exportWithSAF(filename, content);
-    return {
-      success: safRes.success,
-      message: safRes.message,
-      path: safRes.uri,
-      method: 'saf',
-    };
-  }
-
-  const ok = triggerDirectDownload(filename, content);
-  return {
-    success: ok,
-    message: ok ? `Đã tải tệp ${filename} về máy!` : 'Không thể tải tệp.',
-    method: 'browser',
-  };
-}
-
-/**
- * Hàm xuất chuẩn chung (Mặc định dùng Auto Download, có fallback)
- */
-export async function exportNovelStandard(
-  filename: string,
-  content: string
-): Promise<ExportResult> {
-  return saveDirectToDownloadFolder(filename, content);
-}
-
-/**
- * Mở màn hình Cài đặt cấp quyền Tất Cả Tệp trên Android
- */
-export async function openAndroidStorageSettings(): Promise<void> {
-  await RootBridge.requestAllFilesAccess();
-}
-
-/**
- * Trình tải trực tiếp cho Web Browser
- */
-export function triggerDirectDownload(
-  filename: string,
-  content: string
-): boolean {
+export async function shareNovelFile(filename: string, content: string): Promise<boolean> {
   try {
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.style.display = 'none';
-
-    document.body.appendChild(a);
-
-    const clickEvent = new MouseEvent('click', {
-      view: window,
-      bubbles: true,
-      cancelable: true,
+    const cleanFilename = filename.endsWith('.txt') ? filename : `${filename}.txt`;
+    const tempFile = await Filesystem.writeFile({
+      path: cleanFilename,
+      data: content,
+      directory: Directory.Cache,
+      encoding: Encoding.UTF8,
     });
-    a.dispatchEvent(clickEvent);
 
-    document.body.removeChild(a);
-
-    setTimeout(() => {
-      URL.revokeObjectURL(url);
-    }, 180000);
-
-    return true;
-  } catch (err) {
-    console.error('Direct download error:', err);
-    return false;
-  }
-}
-
-/**
- * Tải qua Data URI
- */
-export function triggerDataUriDownload(
-  filename: string,
-  content: string
-): boolean {
-  try {
-    const encoded = encodeURIComponent(content);
-    const dataUri = `data:text/plain;charset=utf-8,${encoded}`;
-    const a = document.createElement('a');
-    a.href = dataUri;
-    a.download = filename;
-    a.style.display = 'none';
-
-    document.body.appendChild(a);
-
-    const clickEvent = new MouseEvent('click', {
-      view: window,
-      bubbles: true,
-      cancelable: true,
+    await Share.share({
+      title: cleanFilename,
+      url: tempFile.uri,
+      dialogTitle: 'Mở hoặc Lưu tệp truyện',
     });
-    a.dispatchEvent(clickEvent);
-
-    document.body.removeChild(a);
     return true;
-  } catch (err) {
-    console.error('Data URI download error:', err);
+  } catch (e) {
+    console.warn('Lỗi Share Intent:', e);
     return false;
   }
 }
