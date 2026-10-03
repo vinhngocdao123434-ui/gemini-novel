@@ -68,6 +68,94 @@ export async function downloadSourceCodeZip(): Promise<void> {
   );
 
   zip.file(
+    'capacitor.config.json',
+    JSON.stringify(
+      {
+        appId: 'com.droidtranslator.novel',
+        appName: 'DroidTranslator',
+        webDir: 'dist',
+      },
+      null,
+      2
+    )
+  );
+
+  const ghWorkflow = zip.folder('.github')?.folder('workflows');
+  if (ghWorkflow) {
+    ghWorkflow.file(
+      'build-apk.yml',
+      `name: Build Android APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Build & Export APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: ☕ Setup Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 🤖 Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 📦 Install Node Dependencies
+        run: |
+          npm install
+
+      - name: 🛠️ Build Web Assets (Vite)
+        run: |
+          npm run build
+
+      - name: 🔄 Sync Capacitor Android
+        run: |
+          npx cap sync android
+
+      - name: 🔑 Make Gradlew Executable
+        run: |
+          chmod +x ./android/gradlew
+
+      - name: 🔨 Build Debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug --stacktrace
+
+      - name: 📤 Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DroidTranslator-Debug-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+`
+    );
+  }
+
+  zip.file(
     'vite.config.ts',
     `import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
