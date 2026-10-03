@@ -1,17 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Download,
   FolderDown,
   Info,
-  HardDrive,
   ShieldCheck,
   ExternalLink,
+  CheckCircle2,
 } from 'lucide-react';
 import { ProjectData } from '../types';
 import {
   exportNovelStandard,
-  saveDirectToDownloadFolder,
   openAndroidStorageSettings,
 } from '../utils/fileDownloader';
 
@@ -28,8 +27,9 @@ export const ExportNovelModal: React.FC<ExportNovelModalProps> = ({
   onClose,
   onAddLog,
 }) => {
-  const [isExporting, setIsExporting] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'info' | 'success' | 'warning' | 'error' } | null>(null);
+  const [blobUrl, setBlobUrl] = useState<string>('');
+  const [downloadTriggered, setDownloadTriggered] = useState<boolean>(false);
 
   const transKeys = Object.keys(projectData.translatedChapters)
     .map(Number)
@@ -54,51 +54,57 @@ export const ExportNovelModal: React.FC<ExportNovelModalProps> = ({
 
   const filename = `${projectData.projectName}_FULL_TRANSLATED.txt`;
 
-  // 1. Xuất tệp theo chuẩn Android Storage Access Framework (SAF)
-  const handleSafExport = async () => {
-    setIsExporting(true);
-    setStatusMessage({ text: 'Đang mở trình chọn vị trí lưu của hệ thống Android...', type: 'info' });
+  // Khởi tạo trước URL Blob để gắn trực tiếp vào thẻ <a href download>
+  // Đảm bảo thao tác chạm ngón tay của người dùng là Trusted User Gesture trên Android Chrome
+  useEffect(() => {
     try {
       const fullText = buildFullNovelText();
-      const res = await exportNovelStandard(filename, fullText);
-      if (res.success) {
-        setStatusMessage({ text: `✅ ${res.message}`, type: 'success' });
-        onAddLog(res.message, 'success');
-      } else {
-        setStatusMessage({ text: res.message, type: 'warning' });
-      }
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      setStatusMessage({ text: `Lỗi xuất tệp: ${errorMsg}`, type: 'error' });
-      onAddLog(`Lỗi xuất tệp: ${errorMsg}`, 'error');
-    } finally {
-      setIsExporting(false);
+      const blob = new Blob([fullText], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      setBlobUrl(url);
+
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    } catch (e) {
+      console.error('Lỗi tạo URL tải trước:', e);
     }
+  }, [projectData]);
+
+  // Xử lý khi người dùng chạm nút tải
+  const handlePrimaryExport = async (e: React.MouseEvent<HTMLAnchorElement>) => {
+    setDownloadTriggered(true);
+
+    // Nếu đang chạy trên APK Native Android (Capacitor)
+    if (typeof window !== 'undefined' && window.Capacitor?.Plugins?.RootBridge) {
+      e.preventDefault(); // Dùng luồng Native Java
+      setStatusMessage({ text: 'Đang mở trình lưu tệp hệ thống Android...', type: 'info' });
+      try {
+        const fullText = buildFullNovelText();
+        const res = await exportNovelStandard(filename, fullText);
+        if (res.success) {
+          setStatusMessage({ text: `✅ ${res.message}`, type: 'success' });
+          onAddLog(res.message, 'success');
+        } else {
+          setStatusMessage({ text: res.message, type: 'warning' });
+        }
+      } catch (err: unknown) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        setStatusMessage({ text: `Lỗi xuất tệp: ${errorMsg}`, type: 'error' });
+      }
+      return;
+    }
+
+    // Nếu đang chạy trên trình duyệt Web/PWA:
+    // Thẻ <a> với href={blobUrl} và download={filename} sẽ tự động kích hoạt tiến trình tải của Android Chrome
+    setStatusMessage({
+      text: `✅ Đang tải ${filename}. Hãy kiểm tra thanh thông báo trạng thái của Android!`,
+      type: 'success',
+    });
+    onAddLog(`Đã tải xuống tệp: ${filename}`, 'success');
   };
 
-  // 2. Ghi nhanh vào /Download
-  const handleDirectDownload = async () => {
-    setIsExporting(true);
-    setStatusMessage({ text: 'Đang ghi vào thư mục /storage/emulated/0/Download/...', type: 'info' });
-    try {
-      const fullText = buildFullNovelText();
-      const res = await saveDirectToDownloadFolder(filename, fullText);
-      if (res.success) {
-        setStatusMessage({ text: `✅ ${res.message}`, type: 'success' });
-        onAddLog(res.message, 'success');
-      } else {
-        setStatusMessage({ text: `❌ ${res.message}`, type: 'error' });
-        onAddLog(res.message, 'error');
-      }
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      setStatusMessage({ text: `Lỗi ghi file: ${errorMsg}`, type: 'error' });
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  // 3. Mở Cài đặt cấp quyền bộ nhớ Android
+  // Mở Cài đặt cấp quyền bộ nhớ Android
   const handleOpenPermissions = async () => {
     try {
       await openAndroidStorageSettings();
@@ -171,43 +177,31 @@ export const ExportNovelModal: React.FC<ExportNovelModalProps> = ({
             </div>
           )}
 
-          {/* Main Action Buttons */}
+          {/* Primary Action Button (Direct <a> link with pre-bound download href) */}
           <div className="space-y-3 pt-1">
-            {/* Primary Action: Standard Android SAF */}
-            <button
-              onClick={handleSafExport}
-              disabled={isExporting || totalTranslated === 0}
-              className="w-full p-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm flex items-center justify-between shadow-lg transition cursor-pointer disabled:opacity-40"
+            <a
+              href={blobUrl || '#'}
+              download={filename}
+              onClick={handlePrimaryExport}
+              className="w-full p-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm flex items-center justify-between shadow-lg transition cursor-pointer select-none"
             >
               <div className="flex items-center gap-3 text-left">
                 <FolderDown className="w-5 h-5 text-white shrink-0" />
                 <div>
-                  <div className="font-bold">Lưu Tệp (Hộp Thoại Android SAF)</div>
+                  <div className="font-bold">
+                    {downloadTriggered ? 'Tải Lại Tệp (.txt)' : 'Tải Tệp Về Máy (/Download)'}
+                  </div>
                   <div className="text-[11px] text-blue-100/80 font-normal">
-                    Chọn thư mục bất kỳ trên máy và nhấn "Lưu"
+                    Lưu vào thư mục /storage/emulated/0/Download/
                   </div>
                 </div>
               </div>
-              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded font-mono font-bold">Chuẩn Android</span>
-            </button>
-
-            {/* Fast Write to /Download */}
-            <button
-              onClick={handleDirectDownload}
-              disabled={isExporting || totalTranslated === 0}
-              className="w-full p-3.5 rounded-xl bg-[#1e293b] hover:bg-[#283548] border border-blue-500/30 text-gray-100 font-medium text-xs sm:text-sm flex items-center justify-between transition cursor-pointer disabled:opacity-40"
-            >
-              <div className="flex items-center gap-3 text-left">
-                <HardDrive className="w-4 h-4 text-emerald-400 shrink-0" />
-                <div>
-                  <div className="font-bold">Ghi Nhanh Vào /Download</div>
-                  <div className="text-[11px] text-gray-400 font-normal">
-                    Lưu trực tiếp vào /storage/emulated/0/Download/
-                  </div>
-                </div>
-              </div>
-              <Download className="w-4 h-4 text-emerald-400" />
-            </button>
+              {downloadTriggered ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+              ) : (
+                <Download className="w-4 h-4 text-white" />
+              )}
+            </a>
           </div>
 
           {/* Android Permissions Link */}
