@@ -17,6 +17,7 @@ import { GeminiEngine } from './utils/geminiEngine';
 import { GlossaryManager } from './utils/glossaryManager';
 import { ChapterAuditor } from './utils/chapterAuditor';
 import { downloadSourceCodeZip } from './utils/sourceExporter';
+import { RootBridge } from './utils/rootBridge';
 import { Header } from './components/Header';
 import { TabKeys } from './components/TabKeys';
 import { TabTranslate } from './components/TabTranslate';
@@ -199,7 +200,7 @@ export const App: React.FC = () => {
       const prevText = projectDataRef.current.translatedChapters[chapIndex - 1];
       if (prevText && prevText.trim().length > 0) {
         const takeLen = Math.min(prevText.length, 350);
-        prevSnippet = '...' + prevText.substring(prevText.length() - takeLen).trim();
+        prevSnippet = '...' + prevText.substring(prevText.length - takeLen).trim();
       }
     }
 
@@ -354,6 +355,9 @@ export const App: React.FC = () => {
     setIsTranslating(true);
     setIsPaused(false);
 
+    // Kích hoạt WakeLock giữ CPU luôn thức chống Deep Sleep khi tắt màn hình
+    RootBridge.acquireWakeLock().catch(() => {});
+
     let currentIdx = fromChap - 1;
     const targetEndIdx = toChap;
 
@@ -381,6 +385,7 @@ export const App: React.FC = () => {
       addLog(`🎉 Đã hoàn thành khoảng chương yêu cầu!`, 'success');
     }
 
+    RootBridge.releaseWakeLock().catch(() => {});
     isTranslatingRef.current = false;
     isPausedRef.current = false;
     setIsTranslating(false);
@@ -392,13 +397,16 @@ export const App: React.FC = () => {
     isPausedRef.current = nextPaused;
     setIsPaused(nextPaused);
     if (nextPaused) {
+      RootBridge.releaseWakeLock().catch(() => {});
       addLog(`⏸ Đã tạm dừng tại Chương ${currentTranslatingIndex + 1}.`, 'warning');
     } else {
+      RootBridge.acquireWakeLock().catch(() => {});
       addLog(`▶ Tiếp tục dịch lại Chương ${currentTranslatingIndex + 1}...`, 'info');
     }
   };
 
   const handleCancelTranslation = () => {
+    RootBridge.releaseWakeLock().catch(() => {});
     isTranslatingRef.current = false;
     isPausedRef.current = false;
     setIsTranslating(false);

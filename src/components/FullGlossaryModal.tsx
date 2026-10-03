@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Search, Plus, Trash2, Edit2, Download, Upload, Check } from 'lucide-react';
+import { X, Search, Plus, Trash2, Edit2, Download } from 'lucide-react';
 import { ProjectData } from '../types';
 
 interface FullGlossaryModalProps {

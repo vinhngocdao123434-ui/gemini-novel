@@ -37,7 +37,7 @@ interface TabTranslateProps {
 }
 
 export const TabTranslate: React.FC<TabTranslateProps> = ({
-  settings,
+  settings: _settings,
   projectData,
   logs,
   isTranslating,

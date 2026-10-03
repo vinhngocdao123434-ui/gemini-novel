@@ -154,7 +154,7 @@ export class ChapterAuditor {
       let substitutedCount = 0;
       for (const [rawTerm, viTerm] of Object.entries(glossary)) {
         if (rawTerm && viTerm && cleaned.includes(rawTerm)) {
-          cleaned = cleaned.replaceAll(rawTerm, viTerm);
+          cleaned = cleaned.split(rawTerm).join(viTerm);
           substitutedCount++;
         }
       }

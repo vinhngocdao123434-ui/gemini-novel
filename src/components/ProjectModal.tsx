@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, BookOpen, Plus, Trash2, Check } from 'lucide-react';
+import { X, BookOpen, Plus, Check } from 'lucide-react';
 
 interface ProjectModalProps {
   mode: 'switch' | 'new';

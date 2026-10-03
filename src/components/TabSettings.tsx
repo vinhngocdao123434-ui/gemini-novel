@@ -1,22 +1,18 @@
 import React, { useState } from 'react';
 import {
-  Settings,
   Trash2,
   Layers,
   FolderPlus,
   ShieldCheck,
   Languages,
   Filter,
-  Save,
-  Clock,
   Download,
-  Check,
   SearchCheck,
   Wrench,
-  AlertTriangle,
   RotateCcw,
 } from 'lucide-react';
 import { AppSettings, ProjectData } from '../types';
+import { RootSettingsSection } from './RootSettingsSection';
 
 interface TabSettingsProps {
   settings: AppSettings;
@@ -45,6 +41,7 @@ export const TabSettings: React.FC<TabSettingsProps> = ({
   onOpenNewProjectModal,
   onDeleteCurrentProject,
   onExportFullNovel,
+  onDownloadSourceCode,
   onAddLog,
 }) => {
   const [customMinTermInput, setCustomMinTermInput] = useState<string>(String(settings.minTermLength));
@@ -365,12 +362,15 @@ export const TabSettings: React.FC<TabSettingsProps> = ({
         </div>
       </section>
 
-      {/* 5. Trạng Thái 5 Tầng Chạy Ngầm (God-Mode) & Độ Trễ */}
+      {/* 5. Trạng Thái 5 Tầng Chạy Ngầm & Chế Độ Root */}
       <section className="bg-[#141414] border border-[#222] rounded-xl p-4 sm:p-5 shadow-sm space-y-4">
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-5 h-5 text-amber-400" />
-          <h2 className="text-sm sm:text-base font-bold text-white">5. Trạng Thái 5 Tầng Chạy Ngầm (God-Mode)</h2>
+          <h2 className="text-sm sm:text-base font-bold text-white">5. Trạng Thái Chạy Ngầm Bất Tử &amp; Quyền Root</h2>
         </div>
+
+        {/* Mục Root & Linux Kernel ẩn gọn gàng */}
+        <RootSettingsSection onAddLog={onAddLog} />
 
         <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-4 space-y-2 font-mono text-xs">
           <div className="flex items-center justify-between text-emerald-400">
