@@ -98,37 +98,50 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
+    - name: 📥 Checkout repository
       uses: actions/checkout@v4
 
-    - name: Set up Java 21
+    - name: ☕ Set up Java JDK 21
       uses: actions/setup-java@v4
       with:
         java-version: '21'
         distribution: 'temurin'
 
-    - name: Set up Node.js 22
+    - name: 🐘 Set up Gradle Build Cache
+      uses: gradle/actions/setup-gradle@v4
+
+    - name: 🟢 Set up Node.js 22
       uses: actions/setup-node@v4
       with:
         node-version: 22
 
-    - name: Install dependencies & Build
+    - name: 🛠️ Build Web Assets & Initialize Android Platform
       run: |
         npm install
         npm run build
+        if [ ! -f "android/gradlew" ]; then
+          echo "⚠️ android/gradlew not found in git repo. Auto-generating Android native platform..."
+          rm -rf android
+          npx cap add android
+        fi
+        sed -i 's/compileSdkVersion = 36/compileSdkVersion = 35/g' android/variables.gradle 2>/dev/null || true
+        sed -i 's/targetSdkVersion = 36/targetSdkVersion = 35/g' android/variables.gradle 2>/dev/null || true
+        yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses 2>/dev/null || true
         npx cap sync android
 
-    - name: Build APK with Gradle
+    - name: 🔨 Build Debug APK
       run: |
         cd android
         chmod +x gradlew
-        ./gradlew assembleDebug --no-daemon
+        ./gradlew assembleDebug --no-daemon --stacktrace
 
-    - name: Upload APK
+    - name: 📤 Upload Debug APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: DroidTranslator-APK
         path: android/app/build/outputs/apk/debug/app-debug.apk
+        if-no-files-found: error
+        retention-days: 30
 `
     );
   }
