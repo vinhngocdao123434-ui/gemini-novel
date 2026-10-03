@@ -83,74 +83,52 @@ export async function downloadSourceCodeZip(): Promise<void> {
   const ghWorkflow = zip.folder('.github')?.folder('workflows');
   if (ghWorkflow) {
     ghWorkflow.file(
-      'build-apk.yml',
-      `name: Build Android APK
+      'android.yml',
+      `name: Android CI
 
 on:
   push:
-    branches:
-      - main
-      - master
-    tags:
-      - 'v*'
+    branches: [ "main", "master" ]
   pull_request:
-    branches:
-      - main
-      - master
+    branches: [ "main", "master" ]
   workflow_dispatch:
 
 jobs:
-  build-apk:
-    name: Build & Export APK
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: 🟢 Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
+    - name: Set up Java 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
 
-      - name: ☕ Setup Java JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
+    - name: Set up Node.js 20
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
 
-      - name: 🐘 Setup Gradle Build Cache
-        uses: gradle/actions/setup-gradle@v4
+    - name: Install dependencies & Build
+      run: |
+        npm install
+        npm run build
+        npx cap sync android
 
-      - name: 📦 Install Node Dependencies
-        run: |
-          npm install
+    - name: Build APK with Gradle
+      run: |
+        cd android
+        chmod +x gradlew
+        ./gradlew assembleDebug --no-daemon
 
-      - name: 🛠️ Build Web Assets (Vite)
-        run: |
-          npm run build
-
-      - name: 🔄 Sync Capacitor Android
-        run: |
-          npx cap sync android
-
-      - name: 🔑 Make Gradlew Executable
-        run: |
-          chmod +x ./android/gradlew
-
-      - name: 🔨 Build Debug APK
-        run: |
-          cd android
-          ./gradlew assembleDebug --stacktrace
-
-      - name: 📤 Upload Debug APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: DroidTranslator-Debug-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 30
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: DroidTranslator-APK
+        path: android/app/build/outputs/apk/debug/app-debug.apk
 `
     );
   }
