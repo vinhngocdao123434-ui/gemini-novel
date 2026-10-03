@@ -26,10 +26,8 @@ dependencies:
   flutter_foreground_task: ^6.1.0
   wakelock_plus: ^1.2.2
 
-  # UI & State
+  # State Management
   provider: ^6.1.2
-  lucide_icons: ^0.257.0
-  google_fonts: ^6.1.0
 
 dev_dependencies:
   flutter_test:

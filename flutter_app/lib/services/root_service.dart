@@ -29,10 +29,10 @@ class RootService {
 
   /// Kích hoạt Linux Kernel God-Mode (OOM -1000, Tắt Phantom Killer)
   static Future<Map<String, dynamic>> acquireGodMode() async {
-    final pid = pid;
+    final currentPid = pid;
     final commands = [
       // 1. OOM Score -1000: Bất tử trước LMK của Android
-      'echo -1000 > /proc/$pid/oom_score_adj',
+      'echo -1000 > /proc/$currentPid/oom_score_adj',
       // 2. Tắt Phantom Process Killer trên Android 12-16
       '/system/bin/device_config set_sync_disabled_for_tests persistent',
       '/system/bin/device_config put activity_manager max_phantom_processes 2147483647',
@@ -65,45 +65,47 @@ class RootService {
 
   /// Khởi động Foreground Service để treo dịch 24/24 trên thanh thông báo
   static Future<void> startForegroundTask() async {
-    await FlutterForegroundTask.init(
-      androidNotificationOptions: AndroidNotificationOptions(
-        channelId: 'droid_translation_service',
-        channelName: 'DroidTranslator Background Service',
-        channelDescription: 'Duy trì tiến trình dịch tiểu thuyết chạy ngầm 24/24',
-        channelImportance: NotificationChannelImportance.LOW,
-        priority: NotificationPriority.LOW,
-        iconData: const NotificationIconData(
-          resType: ResourceType.mipmap,
-          resPrefix: ResourcePrefix.ic,
-          name: 'launcher',
+    try {
+      FlutterForegroundTask.init(
+        androidNotificationOptions: AndroidNotificationOptions(
+          channelId: 'droid_translation_service',
+          channelName: 'DroidTranslator Background Service',
+          channelDescription: 'Duy trì tiến trình dịch tiểu thuyết chạy ngầm 24/24',
+          channelImportance: NotificationChannelImportance.LOW,
+          priority: NotificationPriority.LOW,
         ),
-      ),
-      iosNotificationOptions: const IOSNotificationOptions(),
-      foregroundTaskOptions: const ForegroundTaskOptions(
-        interval: 5000,
-        isOnceEvent: false,
-        autoRunOnBoot: false,
-        allowWakeLock: true,
-        allowWifiLock: true,
-      ),
-    );
-
-    if (await FlutterForegroundTask.isRunningService) {
-      await FlutterForegroundTask.restartService();
-    } else {
-      await FlutterForegroundTask.startService(
-        notificationTitle: 'DroidTranslator đang dịch ngầm',
-        notificationText: 'Hệ thống đang hoạt động liên tục không bị gián đoạn...',
+        iosNotificationOptions: const IOSNotificationOptions(),
+        foregroundTaskOptions: const ForegroundTaskOptions(
+          interval: 5000,
+          isOnceEvent: false,
+          autoRunOnBoot: false,
+          allowWakeLock: true,
+          allowWifiLock: true,
+        ),
       );
-    }
 
-    // Khóa CPU luôn thức
-    await WakelockPlus.enable();
+      if (await FlutterForegroundTask.isRunningService) {
+        await FlutterForegroundTask.restartService();
+      } else {
+        await FlutterForegroundTask.startService(
+          notificationTitle: 'DroidTranslator đang dịch ngầm',
+          notificationText: 'Hệ thống đang hoạt động liên tục không bị gián đoạn...',
+        );
+      }
+    } catch (_) {}
+
+    try {
+      await WakelockPlus.enable();
+    } catch (_) {}
   }
 
   /// Dừng Foreground Service và giải phóng WakeLock
   static Future<void> stopForegroundTask() async {
-    await FlutterForegroundTask.stopService();
-    await WakelockPlus.disable();
+    try {
+      await FlutterForegroundTask.stopService();
+    } catch (_) {}
+    try {
+      await WakelockPlus.disable();
+    } catch (_) {}
   }
 }

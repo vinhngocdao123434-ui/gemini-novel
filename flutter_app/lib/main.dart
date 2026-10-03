@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:lucide_icons/lucide_icons.dart';
 import 'models/app_models.dart';
 import 'services/storage_service.dart';
 import 'services/root_service.dart';
@@ -266,12 +265,12 @@ class _MainTranslationScreenState extends State<MainTranslationScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(LucideIcons.download, size: 20, color: Colors.blueAccent),
+            icon: const Icon(Icons.download, size: 20, color: Colors.blueAccent),
             tooltip: 'Lưu vào thư mục Download',
             onPressed: () => _exportFullNovel(useSaf: false),
           ),
           IconButton(
-            icon: const Icon(LucideIcons.folderPlus, size: 20, color: Color(0xFF34D399)),
+            icon: const Icon(Icons.create_new_folder, size: 20, color: Color(0xFF34D399)),
             tooltip: 'Chọn nơi lưu (SAF)',
             onPressed: () => _exportFullNovel(useSaf: true),
           ),
@@ -288,10 +287,10 @@ class _MainTranslationScreenState extends State<MainTranslationScreen> {
         selectedFontSize: 11,
         unselectedFontSize: 11,
         items: const [
-          BottomNavigationBarItem(icon: Icon(LucideIcons.keyRound, size: 18), label: 'Key & Prompt'),
-          BottomNavigationBarItem(icon: Icon(LucideIcons.play, size: 18), label: 'Dịch & Từ điển'),
-          BottomNavigationBarItem(icon: Icon(LucideIcons.bookOpen, size: 18), label: 'Đọc & Duyệt'),
-          BottomNavigationBarItem(icon: Icon(LucideIcons.settings, size: 18), label: 'Cài đặt & Root'),
+          BottomNavigationBarItem(icon: Icon(Icons.vpn_key, size: 18), label: 'Key & Prompt'),
+          BottomNavigationBarItem(icon: Icon(Icons.play_arrow, size: 18), label: 'Dịch & Từ điển'),
+          BottomNavigationBarItem(icon: Icon(Icons.menu_book, size: 18), label: 'Đọc & Duyệt'),
+          BottomNavigationBarItem(icon: Icon(Icons.settings, size: 18), label: 'Cài đặt & Root'),
         ],
       ),
     );
@@ -318,7 +317,7 @@ class _MainTranslationScreenState extends State<MainTranslationScreen> {
       children: [
         _buildCard(
           title: '1. Chọn Mô Hình Gemini',
-          icon: LucideIcons.cpu,
+          icon: Icons.memory,
           child: Wrap(
             spacing: 8,
             children: ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'].map((m) {
@@ -337,7 +336,7 @@ class _MainTranslationScreenState extends State<MainTranslationScreen> {
         const SizedBox(height: 12),
         _buildCard(
           title: '2. Multi-Key Gemini Pool (${_apiKeys.length} Keys)',
-          icon: LucideIcons.keyRound,
+          icon: Icons.vpn_key,
           child: Column(
             children: [
               ..._apiKeys.map((k) {
@@ -352,7 +351,7 @@ class _MainTranslationScreenState extends State<MainTranslationScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(LucideIcons.key, size: 14, color: Colors.amberAccent),
+                      const Icon(Icons.key, size: 14, color: Colors.amberAccent),
                       const SizedBox(width: 8),
                       Expanded(child: Text(masked, style: const TextStyle(fontFamily: 'monospace', fontSize: 12))),
                       Container(
@@ -385,7 +384,7 @@ class _MainTranslationScreenState extends State<MainTranslationScreen> {
         // Project Overview
         _buildCard(
           title: 'Dự Án: ${_projectData.projectName}',
-          icon: LucideIcons.layers,
+          icon: Icons.layers,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -399,7 +398,7 @@ class _MainTranslationScreenState extends State<MainTranslationScreen> {
         // Controls
         _buildCard(
           title: 'Điều Khiển Dịch Thuật Tự Động',
-          icon: LucideIcons.playCircle,
+          icon: Icons.play_circle_fill,
           child: Column(
             children: [
               Row(
@@ -410,7 +409,7 @@ class _MainTranslationScreenState extends State<MainTranslationScreen> {
                         backgroundColor: _isTranslating ? Colors.amber[800] : Colors.blue[700],
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
-                      icon: Icon(_isTranslating ? (_isPaused ? LucideIcons.play : LucideIcons.pause) : LucideIcons.play, size: 16),
+                      icon: Icon(_isTranslating ? (_isPaused ? Icons.play_arrow : Icons.pause) : Icons.play_arrow, size: 16),
                       label: Text(_isTranslating ? (_isPaused ? 'Tiếp tục' : 'Tạm dừng') : 'Bắt đầu Dịch Toàn Bộ'),
                       onPressed: () {
                         if (_isTranslating) {
@@ -424,7 +423,7 @@ class _MainTranslationScreenState extends State<MainTranslationScreen> {
                   if (_isTranslating) ...[
                     const SizedBox(width: 8),
                     IconButton(
-                      icon: const Icon(LucideIcons.square, color: Color(0xFFF43F5E)),
+                      icon: const Icon(Icons.stop, color: Color(0xFFF43F5E)),
                       onPressed: () => setState(() => _isTranslating = false),
                     )
                   ]
@@ -438,7 +437,7 @@ class _MainTranslationScreenState extends State<MainTranslationScreen> {
         // Realtime Terminal Logs
         _buildCard(
           title: 'Nhật Ký Thực Thi (Realtime Terminal)',
-          icon: LucideIcons.terminal,
+          icon: Icons.terminal,
           child: Container(
             height: 160,
             padding: const EdgeInsets.all(8),
@@ -497,7 +496,7 @@ class _MainTranslationScreenState extends State<MainTranslationScreen> {
                 : null,
             trailing: isCurrent
                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                : Icon(isDone ? LucideIcons.checkCircle2 : LucideIcons.clock, size: 16, color: isDone ? const Color(0xFF34D399) : Colors.grey),
+                : Icon(isDone ? Icons.check_circle : Icons.schedule, size: 16, color: isDone ? const Color(0xFF34D399) : Colors.grey),
           ),
         );
       },
@@ -511,7 +510,7 @@ class _MainTranslationScreenState extends State<MainTranslationScreen> {
       children: [
         _buildCard(
           title: 'Quyền Root & Kernel God-Mode',
-          icon: LucideIcons.shieldCheck,
+          icon: Icons.security,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -519,7 +518,7 @@ class _MainTranslationScreenState extends State<MainTranslationScreen> {
               const SizedBox(height: 8),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B)),
-                icon: const Icon(LucideIcons.zap, size: 16, color: Colors.amberAccent),
+                icon: const Icon(Icons.bolt, size: 16, color: Colors.amberAccent),
                 label: const Text('Kích hoạt OOM -1000 & Tắt Phantom Killer'),
                 onPressed: () async {
                   final res = await RootService.acquireGodMode();
@@ -532,19 +531,19 @@ class _MainTranslationScreenState extends State<MainTranslationScreen> {
         const SizedBox(height: 12),
         _buildCard(
           title: 'Xuất Dữ Liệu Tác Phẩm',
-          icon: LucideIcons.downloadCloud,
+          icon: Icons.cloud_download,
           child: Column(
             children: [
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(LucideIcons.download, color: Colors.blueAccent),
+                leading: const Icon(Icons.download, color: Colors.blueAccent),
                 title: const Text('Tự động lưu vào /storage/emulated/0/Download/', style: TextStyle(fontSize: 13)),
                 onTap: () => _exportFullNovel(useSaf: false),
               ),
               const Divider(),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(LucideIcons.folderPlus, color: Color(0xFF34D399)),
+                leading: const Icon(Icons.create_new_folder, color: Color(0xFF34D399)),
                 title: const Text('Chọn thư mục lưu tùy ý (SAF - Thẻ nhớ SD, v.v.)', style: TextStyle(fontSize: 13)),
                 onTap: () => _exportFullNovel(useSaf: true),
               ),
