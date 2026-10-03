@@ -110,7 +110,7 @@ export class GeminiEngine {
           promptText += `${previousChapterSnippet.trim()}${nl}${nl}`;
         }
 
-        promptText += `[VĂN BẢN GỐC CHƯƠNG HIỆN TẠI (CHỈ DỊCH VÀ BÓC TÁCH TỪ ĐÂY)]:${nl}${chapterText}${nl}${nl}`;
+        promptText += `[VĂN BẢN GỐC CHƯƠNG HIỆN TẠI (BẮT BUỘC DỊCH TOÀN BỘ VĂN BẢN DƯỚI ĐÂY)]:${nl}${chapterText}${nl}${nl}`;
 
         const isViet = !targetLanguage || targetLanguage.toLowerCase().includes('việt');
         const isJap = targetLanguage && (targetLanguage.toLowerCase().includes('nhật') || targetLanguage.toLowerCase().includes('japan') || targetLanguage.includes('日本語'));
@@ -125,15 +125,15 @@ export class GeminiEngine {
           promptText += `[TARGET JAPANESE]: Translate fluently into natural Japanese, seamlessly incorporating Kanji, Hiragana, and Katakana.${nl}${nl}`;
         }
 
-        promptText += `[QUY TẮC ĐẦU RA BẮT BUỘC]:${nl}`;
+        promptText += `[CẤU TRÚC ĐẦU RA BẮT BUỘC - ĐẦY ĐỦ CẢ 2 PHẦN]:${nl}`;
+        promptText += `CẢNH BÁO TỐI QUAN TRỌNG: Bạn BẮT BUỘC phải dịch toàn bộ nội dung chương vào khối ===TRANSLATION=== trước tiên. TUYỆT ĐỐI KHÔNG ĐƯỢC CHỈ TRẢ VỀ GLOSSARY MÀ QUÊN DỊCH NỘI DUNG.${nl}${nl}`;
         promptText += `===TRANSLATION===${nl}`;
-        promptText += `(Toàn bộ bản dịch trôi chảy)${nl}`;
+        promptText += `(Dịch toàn bộ nội dung chương ở đây trôi chảy, tuyệt đối không được để trống)${nl}${nl}`;
         promptText += `===NEW_GLOSSARY===${nl}`;
-        promptText += `(Chỉ trích xuất các DANH TỪ RIÊNG [tên nhân vật, tông môn, địa danh, công pháp, bảo vật] MỚI xuất hiện trong chương hiện tại CHƯA CÓ trong Glossary gửi kèm.${nl}`;
-        promptText += `QUY TẮC NGHIÊM NGẶT:${nl}`;
-        promptText += `1. ĐỘ DÀI: Bắt buộc từ ${minTermLength > 0 ? minTermLength : 2} ký tự chữ Hán trở lên. TUYỆT ĐỐI KHÔNG thêm từ 1 ký tự và KHÔNG thêm từ vựng thông dụng.${nl}`;
-        promptText += `2. TẦN SUẤT: Tên riêng đó BẮT BUỘC phải xuất hiện từ ${minFrequency > 0 ? minFrequency : 2} lần trở lên trong văn bản gốc chương này.${nl}`;
-        promptText += `3. ĐỊNH DẠNG: Mỗi dòng định dạng chuẩn: [TừGốc] = [NghĩaDịch]. TUYỆT ĐỐI KHÔNG ĐẢO NGƯỢC THỨ TỰ)`;
+        promptText += `(Trích xuất các DANH TỪ RIÊNG mới xuất hiện trong chương theo quy tắc:${nl}`;
+        promptText += `1. ĐỘ DÀI: Từ ${minTermLength > 0 ? minTermLength : 2} ký tự chữ Hán trở lên.${nl}`;
+        promptText += `2. TẦN SUẤT: Xuất hiện từ ${minFrequency > 0 ? minFrequency : 2} lần trở lên trong chương này.${nl}`;
+        promptText += `3. ĐỊNH DẠNG: Mỗi dòng: [TừGốc] = [NghĩaDịch]. Nếu không có từ mới nào, ghi: Không có)`;
 
         const actualModel = modelName && modelName.trim() ? modelName.trim() : 'gemini-2.5-flash';
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${actualModel}:generateContent?key=${keyItem.key}`;
@@ -146,6 +146,7 @@ export class GeminiEngine {
           ],
           generationConfig: {
             temperature: 0.3,
+            maxOutputTokens: 8192,
           },
         };
 
@@ -194,7 +195,7 @@ export class GeminiEngine {
       return ['', ''];
     }
 
-    let translation = text;
+    let translation = '';
     let newGlossary = '';
 
     const transRegex = /[#*]*[ \t\n\r]*===+[ \t\n\r]*TRANSLATION[ \t\n\r]*===+[#*]*/i;
@@ -203,27 +204,41 @@ export class GeminiEngine {
     const mTrans = transRegex.exec(text);
     const mGloss = glossRegex.exec(text);
 
-    let transStart = -1;
-    if (mTrans) {
-      transStart = mTrans.index + mTrans[0].length;
-    }
-
-    let glossStart = -1;
-    if (mGloss) {
-      glossStart = mGloss.index;
-      const glossContentStart = mGloss.index + mGloss[0].length;
-      newGlossary = text.substring(glossContentStart).trim();
-    }
-
-    if (transStart !== -1) {
-      if (glossStart !== -1 && glossStart > transStart) {
-        translation = text.substring(transStart, glossStart).trim();
+    if (mTrans && mGloss) {
+      if (mTrans.index < mGloss.index) {
+        // Thứ tự chuẩn: ===TRANSLATION=== trước, ===NEW_GLOSSARY=== sau
+        const transStart = mTrans.index + mTrans[0].length;
+        translation = text.substring(transStart, mGloss.index).trim();
+        const glossStart = mGloss.index + mGloss[0].length;
+        newGlossary = text.substring(glossStart).trim();
       } else {
+        // Đảo ngược: ===NEW_GLOSSARY=== trước, ===TRANSLATION=== sau
+        const glossStart = mGloss.index + mGloss[0].length;
+        newGlossary = text.substring(glossStart, mTrans.index).trim();
+        const transStart = mTrans.index + mTrans[0].length;
         translation = text.substring(transStart).trim();
       }
-    } else if (glossStart !== -1) {
-      translation = text.substring(0, glossStart).trim();
+    } else if (mTrans && !mGloss) {
+      // Chỉ có thẻ TRANSLATION
+      const transStart = mTrans.index + mTrans[0].length;
+      translation = text.substring(transStart).trim();
+    } else if (!mTrans && mGloss) {
+      // Chỉ có thẻ NEW_GLOSSARY
+      const glossStart = mGloss.index;
+      const textBeforeGloss = text.substring(0, glossStart).trim();
+      const textAfterGloss = text.substring(mGloss.index + mGloss[0].length).trim();
+
+      if (textBeforeGloss.length > 50) {
+        translation = textBeforeGloss;
+        newGlossary = textAfterGloss;
+      } else {
+        // Toàn bộ phản hồi chỉ là thẻ Glossary mà không có nội dung dịch!
+        // Đặt translation = '' để ChapterAuditor kích hoạt lỗi critical và dịch lại ngay lập tức!
+        translation = '';
+        newGlossary = textAfterGloss;
+      }
     } else {
+      // Không có thẻ nào: Toàn bộ là bản dịch
       translation = text.trim();
     }
 
@@ -244,7 +259,14 @@ export class GeminiEngine {
       }
     }
 
-    // Khử lỗi gõ sai bộ gõ Telex (như Xa Đangk Khoa -> Xa Đăng Khoa)
+    // Kiểm tra nếu translation chỉ toàn các dòng dạng "Key = Value" (Glossary rò rỉ mà không có nội dung truyện)
+    const lines = translation.split('\n').map((l) => l.trim()).filter(Boolean);
+    if (lines.length > 0 && lines.every((l) => l.includes('=') && l.length < 50)) {
+      // Đây thực chất là Glossary bị nhầm thành bản dịch -> Đưa về rỗng để trigger auto-retry
+      translation = '';
+    }
+
+    // Khử lỗi gõ sai bộ gõ Telex
     translation = translation
       .replace(/\b([A-Za-zÀ-ỹ]+)ngk\b/gi, '$1ng')
       .replace(/\b([A-Za-zÀ-ỹ]+)awk\b/gi, '$1ă')

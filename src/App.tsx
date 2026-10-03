@@ -220,10 +220,15 @@ export const App: React.FC = () => {
       }
 
       try {
+        let currentPrompt = activePrompt;
+        if (attempt > 1) {
+          currentPrompt += `\n\n[CẢNH BÁO QUAN TRỌNG TỰ ĐỘNG GHI ĐÈ]: Lần trước bản dịch bị thiếu nội dung hoặc chỉ có từ điển. BẮT BUỘC bạn phải dịch đầy đủ 100% từng câu chữ của chương hiện tại vào khối ===TRANSLATION=== trước tiên.`;
+        }
+
         const [translatedTextRaw, newGlossaryBlock] = await engineRef.current.translateChapter(
           rawText,
           prevSnippet,
-          activePrompt,
+          currentPrompt,
           projectDataRef.current.masterGlossary,
           model,
           targetLang,
