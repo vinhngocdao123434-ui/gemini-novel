@@ -322,7 +322,23 @@ public class RootBridgePlugin extends Plugin {
             boolean written = false;
             String savedPath = "";
 
-            // 1. Android 10+ (API 29+): MediaStore Scoped Storage
+            // 0. Luôn ghi một bản lưu dự phòng vào Android/data/com.droidtranslator.novel/files/Novels/
+            try {
+                File extDir = getContext().getExternalFilesDir(null);
+                if (extDir != null) {
+                    File novelsDir = new File(extDir, "Novels");
+                    if (!novelsDir.exists()) novelsDir.mkdirs();
+                    File dataFile = new File(novelsDir, filename);
+                    FileOutputStream dfos = new FileOutputStream(dataFile);
+                    dfos.write(content.getBytes(StandardCharsets.UTF_8));
+                    dfos.flush();
+                    dfos.close();
+                    savedPath = dataFile.getAbsolutePath();
+                    written = true;
+                }
+            } catch (Exception ignored) {}
+
+            // 1. Android 10+ (API 29+): MediaStore Scoped Storage (/storage/emulated/0/Download/)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 ContentResolver resolver = getContext().getContentResolver();
                 ContentValues contentValues = new ContentValues();
