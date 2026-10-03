@@ -269,6 +269,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     'src/types/index.ts',
     'src/utils/geminiEngine.ts',
     'src/utils/glossaryManager.ts',
+    'src/utils/sinoVietnameseDictionary.ts',
     'src/utils/chapterAuditor.ts',
     'src/utils/fileParser.ts',
     'src/utils/storage.ts',

@@ -72,34 +72,65 @@ function cleanHtml(html: string): string {
 }
 
 /**
- * Tách tiểu thuyết thành các chương riêng biệt
+ * Tách tiểu thuyết thành các chương riêng biệt với độ chính xác cao
  */
-export function splitTextIntoChapters(text: string, byChars: boolean = false, chunkSize: number = 3500): string[] {
+export function splitTextIntoChapters(
+  text: string,
+  byChars: boolean = false,
+  chunkSize: number = 3500
+): string[] {
   if (!text || !text.trim()) return [];
 
   const trimmed = text.trim();
-  const rawChapters: string[] = [];
 
-  if (!byChars) {
-    // Regex chuẩn hỗ trợ: 第1章, 第一百二十章, Chương 1, Hồi 2, Tiết 3, Quyển 4, Chapter 1
-    const chapterRegex = /(?=(第[0-9一二三四五六七八九十百千万]+[章回节卷]|Chương[\s\t\n\r]*[0-9]+|Chapter[\s\t\n\r]*[0-9]+))/i;
-    const parts = trimmed.split(chapterRegex);
-    for (const p of parts) {
-      const pTrim = p.trim();
-      if (pTrim.length > 0) {
-        rawChapters.push(pTrim);
-      }
-    }
-  } else {
+  if (byChars) {
     const safeChunk = Math.max(500, chunkSize || 3500);
+    const rawChapters: string[] = [];
     for (let i = 0; i < trimmed.length; i += safeChunk) {
       rawChapters.push(trimmed.substring(i, Math.min(i + safeChunk, trimmed.length)).trim());
     }
+    return rawChapters.length > 0 ? rawChapters : [trimmed];
   }
 
-  if (rawChapters.length === 0) {
-    rawChapters.push(trimmed);
+  // Khớp chính xác tiêu đề chương ở đầu dòng (line-start), KHÔNG bắt từ vụn vặt trong câu
+  // Hỗ trợ:
+  // - 第1章, 第 1 章, 第一百二十章, 第1回, 第1集
+  // - Chương 1, Hồi 1, Tiết 1, Chapter 1
+  const chapterLinePattern = /(?:^|\n)[ \t]*(?:第[0-9一二三四五六七八九十百千万零两\s]+[章回集]|Chương\s+[0-9]+|Hồi\s+[0-9]+|Chapter\s+[0-9]+)[^\n]*/gim;
+
+  const matches: { index: number; text: string }[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = chapterLinePattern.exec(trimmed)) !== null) {
+    matches.push({
+      index: match.index,
+      text: match[0],
+    });
   }
 
-  return rawChapters;
+  // Nếu không tìm thấy mẫu tiêu đề nào phù hợp -> trả về toàn văn
+  if (matches.length === 0) {
+    return [trimmed];
+  }
+
+  const chapters: string[] = [];
+
+  // Nếu có phần giới thiệu/lời tựa trước chương đầu tiên
+  if (matches[0].index > 0) {
+    const prologue = trimmed.substring(0, matches[0].index).trim();
+    if (prologue.length > 80) {
+      chapters.push(prologue);
+    }
+  }
+
+  for (let i = 0; i < matches.length; i++) {
+    const startIndex = matches[i].index;
+    const endIndex = i < matches.length - 1 ? matches[i + 1].index : trimmed.length;
+    const chapterContent = trimmed.substring(startIndex, endIndex).trim();
+
+    if (chapterContent.length > 0) {
+      chapters.push(chapterContent);
+    }
+  }
+
+  return chapters.length > 0 ? chapters : [trimmed];
 }

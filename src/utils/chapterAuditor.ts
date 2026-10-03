@@ -1,4 +1,5 @@
 import { GlossaryManager } from './glossaryManager';
+import { transliterateLeftoverHanzi } from './sinoVietnameseDictionary';
 
 export interface AuditIssue {
   type:
@@ -163,6 +164,13 @@ export class ChapterAuditor {
       }
     }
 
+    // 7. Phiên âm tự động toàn bộ chữ Hán còn sót lại và sửa lỗi dở dang (ví dụ "Trần Th硕" -> "Trần Thạc")
+    const { result: transliterated, replacedCount } = transliterateLeftoverHanzi(cleaned);
+    if (replacedCount > 0) {
+      cleaned = transliterated;
+      healedActions.push(`Phiên âm tự động ${replacedCount} ký tự Hán thành âm Hán-Việt chuẩn`);
+    }
+
     return {
       cleaned: cleaned.trim(),
       healedActions,
@@ -263,25 +271,16 @@ export class ChapterAuditor {
       }
     }
 
-    // 4. Kiểm tra lọt chữ Hán (Hanzi Leakage)
+    // 4. Kiểm tra lọt chữ Hán (Hanzi Leakage) - Tiêu chuẩn KHẮT KHE TUYỆT ĐỐI (Zero-Tolerance)
     const hanziCount = GlossaryManager.countChineseChars(healedText);
     if (hanziCount > 0) {
-      const hanziRatio = hanziCount / transLen;
-      if (hanziCount > 25 || hanziRatio > 0.05) {
-        issues.push({
-          type: 'excessive_hanzi',
-          severity: 'critical',
-          message: `Bản dịch bị lọt quá nhiều chữ Hán (${hanziCount} ký tự Hán, chiếm ${(hanziRatio * 100).toFixed(1)}%). Gần như chưa dịch hoàn tất.`,
-        });
-        score -= 45;
-      } else if (hanziCount > 5) {
-        issues.push({
-          type: 'excessive_hanzi',
-          severity: 'mild',
-          message: `Còn sót ${hanziCount} chữ Hán chưa dịch hoặc chưa có trong Glossary.`,
-        });
-        score -= 10;
-      }
+      const sampleHanzi = healedText.match(/[\u4e00-\u9fa5]+/)?.[0] || '';
+      issues.push({
+        type: 'excessive_hanzi',
+        severity: 'critical',
+        message: `Bản dịch còn sót ${hanziCount} chữ Hán chưa được dịch (Ký tự: '${sampleHanzi}'). Bắt buộc gửi AI dịch lại.`,
+      });
+      score -= 50;
     }
 
     // 5. Kiểm tra lặp từ vô tận
