@@ -1,86 +1,129 @@
 /**
- * Bộ Xuất Tệp Chuẩn Cho Android & Web
- * Áp dụng Storage Access Framework (SAF - ACTION_CREATE_DOCUMENT) chuẩn của Android
+ * Bộ Xuất Tệp Đa Tầng (Multi-Tier Storage Engine) Cho Android Native & Web
+ * Tầng 1: Android 10-16 MediaStore API -> Ghi thẳng vào /storage/emulated/0/Download/
+ * Tầng 2: Storage Access Framework (SAF - ACTION_CREATE_DOCUMENT)
+ * Tầng 3: Capacitor Filesystem (Thư mục Documents/Data của ứng dụng)
+ * Tầng 4: Quyền Root (Linux cp) nếu máy đã Root
+ * Tầng 5: Trình tải trực tiếp Web Browser
  */
 
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { RootBridge } from './rootBridge';
 
 export interface ExportResult {
   success: boolean;
   message: string;
   path?: string;
+  method?: 'mediastore' | 'saf' | 'filesystem' | 'root' | 'browser';
 }
 
 /**
- * Xuất tệp theo chuẩn Android Storage Access Framework (SAF)
- * Mở trình quản lý tệp hệ thống Android để người dùng bấm Lưu vào bất kỳ thư mục nào
- */
-export async function exportNovelStandard(
-  filename: string,
-  content: string
-): Promise<ExportResult> {
-  // 1. Nếu đang chạy trên ứng dụng Android Native (Capacitor)
-  if (typeof window !== 'undefined' && window.Capacitor?.Plugins?.RootBridge) {
-    const safRes = await RootBridge.exportWithSAF(filename, content);
-    if (safRes.success) {
-      return {
-        success: true,
-        message: safRes.message || 'Đã lưu tệp thành công!',
-        path: safRes.uri,
-      };
-    } else {
-      // Nếu người dùng đóng hoặc hủy
-      return {
-        success: false,
-        message: safRes.message || 'Bạn đã hủy lưu tệp.',
-      };
-    }
-  }
-
-  // 2. Nếu đang chạy trên Web Browser: Kích hoạt tải tệp chuẩn trình duyệt
-  const blobOk = triggerDirectDownload(filename, content);
-  if (blobOk) {
-    return {
-      success: true,
-      message: `Đã kích hoạt tải tệp ${filename} vào thư mục Download của trình duyệt!`,
-    };
-  }
-
-  const dataUriOk = triggerDataUriDownload(filename, content);
-  if (dataUriOk) {
-    return {
-      success: true,
-      message: `Đã tải tệp ${filename} qua Data URI!`,
-    };
-  }
-
-  return {
-    success: false,
-    message: 'Không thể kích hoạt tải tệp trên trình duyệt này.',
-  };
-}
-
-/**
- * Ghi thẳng vào /storage/emulated/0/Download/ không cần mở hộp thoại
+ * Xuất tệp tự động vào thư mục Download của thiết bị (Không cần hỏi người dùng)
  */
 export async function saveDirectToDownloadFolder(
   filename: string,
   content: string
 ): Promise<ExportResult> {
-  if (typeof window !== 'undefined' && window.Capacitor?.Plugins?.RootBridge) {
-    const res = await RootBridge.saveFileToAndroid(filename, content);
+  // 1. Nếu đang chạy trên APK Native Android
+  if (RootBridge.isNative()) {
+    // 1.1 Thử qua Native RootBridge (MediaStore API + Root fallback)
+    try {
+      const nativeRes = await RootBridge.saveFileToAndroid(filename, content);
+      if (nativeRes.success) {
+        return {
+          success: true,
+          message: nativeRes.message || `Đã ghi thành công tệp vào ${nativeRes.path}`,
+          path: nativeRes.path,
+          method: 'mediastore',
+        };
+      }
+    } catch (e) {
+      console.warn('Native RootBridge saveFileToAndroid error, trying Capacitor Filesystem:', e);
+    }
+
+    // 1.2 Thử qua Capacitor Filesystem (Ghi vào thư mục Documents của máy)
+    try {
+      const fsRes = await Filesystem.writeFile({
+        path: filename,
+        data: content,
+        directory: Directory.Documents,
+        encoding: Encoding.UTF8,
+        recursive: true,
+      });
+      return {
+        success: true,
+        message: `Đã lưu tệp vào thư mục Documents của máy: ${filename}`,
+        path: fsRes.uri,
+        method: 'filesystem',
+      };
+    } catch (fsErr) {
+      console.warn('Capacitor Filesystem write error, trying SAF fallback:', fsErr);
+    }
+
+    // 1.3 Mở hộp thoại SAF nếu các cơ chế nền bị hãng điện thoại chặn
+    const safRes = await RootBridge.exportWithSAF(filename, content);
     return {
-      success: res.success,
-      message: res.message,
-      path: res.path,
+      success: safRes.success,
+      message: safRes.message,
+      path: safRes.uri,
+      method: 'saf',
+    };
+  }
+
+  // 2. Nếu đang chạy trên Web Browser máy tính hoặc PWA
+  const directOk = triggerDirectDownload(filename, content);
+  if (directOk) {
+    return {
+      success: true,
+      message: `Đã gửi lệnh tải tệp ${filename} về máy qua trình duyệt!`,
+      method: 'browser',
+    };
+  }
+
+  const dataUriOk = triggerDataUriDownload(filename, content);
+  return {
+    success: dataUriOk,
+    message: dataUriOk
+      ? `Đã tải tệp ${filename} qua Data URI!`
+      : 'Không thể kích hoạt tải tệp trên trình duyệt này.',
+    method: 'browser',
+  };
+}
+
+/**
+ * Xuất tệp theo chuẩn Android Storage Access Framework (SAF)
+ * Mở trình quản lý tệp hệ thống Android để người dùng tự chọn thư mục lưu (Thẻ nhớ SD, Download, Documents...)
+ */
+export async function exportNovelWithSAF(
+  filename: string,
+  content: string
+): Promise<ExportResult> {
+  if (RootBridge.isNative()) {
+    const safRes = await RootBridge.exportWithSAF(filename, content);
+    return {
+      success: safRes.success,
+      message: safRes.message,
+      path: safRes.uri,
+      method: 'saf',
     };
   }
 
   const ok = triggerDirectDownload(filename, content);
   return {
     success: ok,
-    message: ok ? `Đã gửi lệnh tải ${filename} vào thư mục Download của máy.` : 'Không thể tải tệp.',
+    message: ok ? `Đã tải tệp ${filename} về máy!` : 'Không thể tải tệp.',
+    method: 'browser',
   };
+}
+
+/**
+ * Hàm xuất chuẩn chung (Mặc định dùng Auto Download, có fallback)
+ */
+export async function exportNovelStandard(
+  filename: string,
+  content: string
+): Promise<ExportResult> {
+  return saveDirectToDownloadFolder(filename, content);
 }
 
 /**

@@ -45,6 +45,19 @@ public class MainActivity extends BridgeActivity {
                 if (!novelsDir.exists()) {
                     novelsDir.mkdirs();
                 }
+                File readme = new File(novelsDir, ".droid_storage_active");
+                if (!readme.exists()) {
+                    java.io.FileOutputStream fos = new java.io.FileOutputStream(readme);
+                    fos.write("DroidTranslator Storage Directory Active".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    fos.flush();
+                    fos.close();
+                }
+                android.media.MediaScannerConnection.scanFile(
+                    this,
+                    new String[]{readme.getAbsolutePath(), extFiles.getAbsolutePath()},
+                    null,
+                    null
+                );
                 Log.i(TAG, "Đã khởi tạo thư mục Android/data thành công: " + extFiles.getAbsolutePath());
             }
 

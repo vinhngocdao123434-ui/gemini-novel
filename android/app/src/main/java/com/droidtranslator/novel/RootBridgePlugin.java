@@ -359,6 +359,18 @@ public class RootBridgePlugin extends Plugin {
                 }
             }
 
+            // Quét MediaScanner để file lập tức hiện diện trong các trình quản lý file
+            if (written && savedPath != null && !savedPath.isEmpty()) {
+                try {
+                    android.media.MediaScannerConnection.scanFile(
+                        getContext(),
+                        new String[]{savedPath},
+                        new String[]{"text/plain"},
+                        null
+                    );
+                } catch (Exception ignored) {}
+            }
+
             // 2. Android 9 trở xuống hoặc khi đã có quyền All Files Access
             if (!written) {
                 File downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);

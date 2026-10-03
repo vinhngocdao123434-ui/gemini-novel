@@ -53,7 +53,6 @@ export const TabSettings: React.FC<TabSettingsProps> = ({
     if (val && val >= 1) {
       onUpdateSettings({ minTermLength: val });
       onAddLog(`⚙️ Đã lưu Độ dài Glossary tối thiểu: >= ${val} ký tự`, 'success');
-      alert(`Đã lưu độ dài chữ Hán tối thiểu: ${val} ký tự!`);
     }
   };
 
@@ -62,7 +61,6 @@ export const TabSettings: React.FC<TabSettingsProps> = ({
     if (val && val >= 1) {
       onUpdateSettings({ minFrequency: val });
       onAddLog(`⚙️ Đã lưu Tần suất Glossary tối thiểu: >= ${val} lần`, 'success');
-      alert(`Đã lưu tần suất lặp lại tối thiểu: ${val} lần!`);
     }
   };
 
@@ -71,7 +69,6 @@ export const TabSettings: React.FC<TabSettingsProps> = ({
     if (val && val >= 1) {
       onUpdateSettings({ delaySec: val });
       onAddLog(`⚙️ Đã lưu độ trễ giữa các chương: ${val} giây`, 'success');
-      alert(`Đã lưu độ trễ: ${val} giây!`);
     }
   };
 

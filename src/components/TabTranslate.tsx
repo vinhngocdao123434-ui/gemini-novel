@@ -140,7 +140,7 @@ export const TabTranslate: React.FC<TabTranslateProps> = ({
   const handleSplitChapters = (byChars: boolean) => {
     const textToSplit = rawTextInput || projectData.loadedRawContent;
     if (!textToSplit.trim()) {
-      alert('Vui lòng dán văn bản truyện hoặc tải tệp .txt/.epub lên trước!');
+      onAddLog('⚠️ Vui lòng dán văn bản truyện hoặc tải tệp .txt/.epub lên trước!', 'warning');
       return;
     }
 
@@ -185,7 +185,7 @@ export const TabTranslate: React.FC<TabTranslateProps> = ({
 
   const handleExportGlossary = () => {
     if (glossaryEntries.length === 0) {
-      alert('Kho từ điển đang trống!');
+      onAddLog('⚠️ Kho từ điển đang trống!', 'warning');
       return;
     }
 
@@ -195,7 +195,6 @@ export const TabTranslate: React.FC<TabTranslateProps> = ({
 
     navigator.clipboard.writeText(fullText);
     onAddLog(`📋 Đã sao chép ${glossaryEntries.length} thuật ngữ dạng raw=vi vào Clipboard!`, 'success');
-    alert(`Đã sao chép ${glossaryEntries.length} từ vào Clipboard! Bạn có thể dán vào tệp .txt.`);
   };
 
   const handleImportGlossaryFile = async (e: React.ChangeEvent<HTMLInputElement>) => {

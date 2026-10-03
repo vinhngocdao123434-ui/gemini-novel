@@ -355,7 +355,7 @@ export const App: React.FC = () => {
   const handleDeleteCurrentProject = () => {
     const name = settings.currentProjectName;
     if (settings.projectList.length <= 1) {
-      alert('Không thể xóa dự án duy nhất còn lại!');
+      addLog('⚠️ Không thể xóa dự án duy nhất còn lại!', 'warning');
       return;
     }
 
@@ -547,7 +547,7 @@ export const App: React.FC = () => {
 
   const startRangeTranslation = async (fromChap: number, toChap: number) => {
     if (apiKeys.length === 0) {
-      alert('Vui lòng thêm ít nhất 1 Gemini API Key ở Tab 1!');
+      addLog('⚠️ Vui lòng thêm ít nhất 1 Gemini API Key ở Tab 1!', 'warning');
       return;
     }
 
@@ -555,7 +555,7 @@ export const App: React.FC = () => {
     const endIdx = Math.min(projectData.rawChapters.length - 1, toChap - 1);
 
     if (startIdx > endIdx) {
-      alert('Khoảng chương không hợp lệ!');
+      addLog('⚠️ Khoảng chương không hợp lệ!', 'warning');
       return;
     }
 
@@ -620,7 +620,7 @@ export const App: React.FC = () => {
     const totalTranslated = Object.keys(translatedMap).length;
 
     if (totalTranslated === 0) {
-      alert('Chưa có chương nào được dịch để kiểm định!');
+      addLog('⚠️ Chưa có chương nào được dịch để kiểm định!', 'warning');
       return;
     }
 
@@ -692,7 +692,7 @@ export const App: React.FC = () => {
       .filter((idx) => auditMap[idx]?.status === 'critical');
 
     if (errorIndices.length === 0) {
-      alert('Không có chương nào bị đánh dấu Lỗi nặng cần dịch lại!');
+      addLog('ℹ️ Không có chương nào bị đánh dấu Lỗi nặng cần dịch lại!', 'info');
       return;
     }
 
@@ -769,9 +769,8 @@ export const App: React.FC = () => {
 
     if (healedActions.length > 0) {
       addLog(`🛠️ Đã sửa offline Chương ${chapIndex + 1}: ${healedActions.join(', ')}`, 'success');
-      alert(`Đã sửa offline thành công!\n\n${healedActions.join('\n')}`);
     } else {
-      alert(`Chương ${chapIndex + 1} đã sạch, không phát hiện rác hay câu thừa.`);
+      addLog(`ℹ️ Chương ${chapIndex + 1} đã sạch, không phát hiện rác hay câu thừa.`, 'info');
     }
   };
 
@@ -780,7 +779,7 @@ export const App: React.FC = () => {
    */
   const handleRetranslateSingleChapter = async (chapIndex: number) => {
     if (apiKeys.length === 0) {
-      alert('Vui lòng thêm ít nhất 1 Gemini API Key ở Tab 1!');
+      addLog('⚠️ Vui lòng thêm ít nhất 1 Gemini API Key ở Tab 1!', 'warning');
       return;
     }
 
@@ -804,7 +803,7 @@ export const App: React.FC = () => {
   const handleExportFullNovel = () => {
     const transKeys = Object.keys(projectData.translatedChapters);
     if (transKeys.length === 0) {
-      alert('Chưa có chương nào được dịch để xuất!');
+      addLog('⚠️ Chưa có chương nào được dịch để xuất!', 'warning');
       return;
     }
     window.history.pushState({ modal: 'exportNovel' }, '');
@@ -820,7 +819,6 @@ export const App: React.FC = () => {
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       addLog(`❌ Lỗi đóng gói source code: ${errorMsg}`, 'error');
-      alert(`Lỗi đóng gói source code: ${errorMsg}`);
     }
   };
 
@@ -981,7 +979,7 @@ export const App: React.FC = () => {
           onExportGlossary={() => {
             const lines = Object.entries(projectData.masterGlossary).map(([k, v]) => `${k}=${v}`);
             navigator.clipboard.writeText(lines.join('\n'));
-            alert(`Đã sao chép ${lines.length} thuật ngữ vào Clipboard!`);
+            addLog(`📋 Đã sao chép ${lines.length} thuật ngữ vào Clipboard!`, 'success');
           }}
         />
       )}

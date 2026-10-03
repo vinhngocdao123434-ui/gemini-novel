@@ -134,7 +134,7 @@ export const TabKeys: React.FC<TabKeysProps> = ({
   const handleDeletePrompt = (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
     if (promptCards.length <= 1) {
-      alert('Phải giữ lại ít nhất 1 thẻ Prompt!');
+      onAddLog('⚠️ Phải giữ lại ít nhất 1 thẻ Prompt!', 'warning');
       return;
     }
     const updated = promptCards.filter((p) => p.id !== id);

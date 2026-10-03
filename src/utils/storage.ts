@@ -129,15 +129,44 @@ export function saveSettings(settings: AppSettings): void {
 }
 
 export function loadApiKeys(): ApiKeyItem[] {
+  const envKey = (import.meta.env.VITE_GEMINI_API_KEY as string | undefined)?.trim();
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.KEYS);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        if (envKey && !parsed.some((k: ApiKeyItem) => k.key === envKey)) {
+          return [
+            {
+              key: envKey,
+              state: 'ACTIVE',
+              cooldownUntil: 0,
+              totalRequests: 0,
+              successRequests: 0,
+            },
+            ...parsed,
+          ];
+        }
+        return parsed;
+      }
     }
   } catch (e) {
     console.error('Error loading API keys', e);
   }
+
+  if (envKey) {
+    return [
+      {
+        key: envKey,
+        state: 'ACTIVE',
+        cooldownUntil: 0,
+        totalRequests: 0,
+        successRequests: 0,
+      },
+      ...DEFAULT_SAMPLE_KEYS,
+    ];
+  }
+
   return DEFAULT_SAMPLE_KEYS;
 }
 
