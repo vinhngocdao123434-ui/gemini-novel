@@ -54,7 +54,7 @@ export const App: React.FC = () => {
     {
       id: '1',
       timestamp: new Date().toLocaleTimeString(),
-      text: '🚀 DroidTranslator Native V10.3: Khung Giao Diện An Toàn & Hỗ Trợ Cử Chỉ Vuốt Android Sẵn Sàng!',
+      text: '🚀 DroidTranslator Native V10.4: Hệ Thống Cử Chỉ Vuốt Cạnh & Thoát App 2 Lần Sẵn Sàng!',
       type: 'info',
     },
   ]);
@@ -72,6 +72,9 @@ export const App: React.FC = () => {
   const [projectModalMode, setProjectModalMode] = useState<'switch' | 'new' | null>(null);
   const [editingGlossaryPair, setEditingGlossaryPair] = useState<{ raw: string; vi: string } | null>(null);
 
+  // Double Back to Exit Toast State
+  const [showExitToast, setShowExitToast] = useState<boolean>(false);
+
   // Refs for translation engine and loop control
   const engineRef = useRef<GeminiEngine>(new GeminiEngine(apiKeys));
   const isTranslatingRef = useRef<boolean>(false);
@@ -79,6 +82,26 @@ export const App: React.FC = () => {
   const projectDataRef = useRef<ProjectData>(projectData);
   const settingsRef = useRef<AppSettings>(settings);
   const promptCardsRef = useRef<PromptCardItem[]>(promptCards);
+
+  // Navigation state refs for instant synchronous access in event handlers
+  const readerChapterIndexRef = useRef(readerChapterIndex);
+  const isFullGlossaryOpenRef = useRef(isFullGlossaryOpen);
+  const projectModalModeRef = useRef(projectModalMode);
+  const editingPromptRef = useRef(editingPrompt);
+  const editingGlossaryPairRef = useRef(editingGlossaryPair);
+  const activeTabRef = useRef(activeTab);
+  const lastBackPressTimeRef = useRef<number>(0);
+  const exitToastTimeoutRef = useRef<number | null>(null);
+
+  // Keep navigation refs in sync
+  useEffect(() => {
+    readerChapterIndexRef.current = readerChapterIndex;
+    isFullGlossaryOpenRef.current = isFullGlossaryOpen;
+    projectModalModeRef.current = projectModalMode;
+    editingPromptRef.current = editingPrompt;
+    editingGlossaryPairRef.current = editingGlossaryPair;
+    activeTabRef.current = activeTab;
+  }, [readerChapterIndex, isFullGlossaryOpen, projectModalMode, editingPrompt, editingGlossaryPair, activeTab]);
 
   // Sync refs & persist
   useEffect(() => {
@@ -102,8 +125,127 @@ export const App: React.FC = () => {
   }, [apiKeys]);
 
   // =========================================================================
-  // BỘ ĐIỀU HƯỚNG CỬ CHỈ ANDROID (ANDROID GESTURE BACK & HISTORY STACK)
+  // CORE ANDROID BACK ENGINE (EDGE GESTURE + POPSTATE + DOUBLE-BACK TO EXIT)
   // =========================================================================
+  const executeBackAction = (): boolean => {
+    // 1. Nếu đang mở Trình đọc Full màn hình -> Đóng Trình đọc
+    if (readerChapterIndexRef.current !== null) {
+      setReaderChapterIndex(null);
+      return true;
+    }
+    // 2. Nếu đang mở Kho từ điển đầy đủ -> Đóng Modal
+    if (isFullGlossaryOpenRef.current) {
+      setIsFullGlossaryOpen(false);
+      return true;
+    }
+    // 3. Nếu đang mở Modal chọn dự án -> Đóng Modal
+    if (projectModalModeRef.current !== null) {
+      setProjectModalMode(null);
+      return true;
+    }
+    // 4. Nếu đang mở Modal chỉnh sửa Prompt -> Đóng Modal
+    if (editingPromptRef.current !== undefined) {
+      setEditingPrompt(undefined);
+      return true;
+    }
+    // 5. Nếu đang mở Modal sửa cặp từ điển -> Đóng Modal
+    if (editingGlossaryPairRef.current !== null) {
+      setEditingGlossaryPair(null);
+      return true;
+    }
+    // 6. Nếu đang ở các tab phụ (Key, Đọc truyện, Cài đặt) -> Quay về Tab Dịch chính (Tab 1)
+    if (activeTabRef.current !== 1) {
+      setActiveTab(1);
+      return true;
+    }
+
+    // 7. Khi đã ở giao diện ngoài cùng (Tab 1 & Không có modal nào mở)
+    // Áp dụng cơ chế Back 2 lần để thoát
+    const now = Date.now();
+    if (now - lastBackPressTimeRef.current < 2000) {
+      // Đã bấm/vuốt back lần thứ 2 trong vòng 2 giây -> Cho phép thoát app
+      setShowExitToast(false);
+      return false; // Cho phép trình duyệt / WebView thoát
+    } else {
+      // Lần back đầu tiên -> Hiển thị Toast thông báo
+      lastBackPressTimeRef.current = now;
+      setShowExitToast(true);
+      if (exitToastTimeoutRef.current) clearTimeout(exitToastTimeoutRef.current);
+      exitToastTimeoutRef.current = window.setTimeout(() => {
+        setShowExitToast(false);
+      }, 2000);
+      return true; // Chặn thoát app lần 1
+    }
+  };
+
+  useEffect(() => {
+    // Luôn cài đặt chốt chặn History Guard để Android không bao giờ thoát đột ngột
+    const armGuard = () => {
+      try {
+        window.history.pushState({ droidNativeGuard: true, time: Date.now() }, '');
+      } catch {}
+    };
+
+    // Khởi tạo Guard ban đầu
+    armGuard();
+
+    const onPopState = () => {
+      const handled = executeBackAction();
+      if (handled) {
+        // Nạp lại Guard ngay lập tức để tiếp tục chặn thoát ngoài ý muốn
+        armGuard();
+      } else {
+        // Thoát app thực sự: lùi lịch sử để thoát ra màn hình chính
+        window.history.go(-2);
+      }
+    };
+
+    window.addEventListener('popstate', onPopState);
+
+    // Bắt thêm cử chỉ vuốt từ mép màn hình cảm ứng (Touch Edge Swipe Gesture)
+    let startX = 0;
+    let startY = 0;
+    let isEdgeSwipe = false;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+      const screenWidth = window.innerWidth;
+      // Vuốt từ mép trái (< 40px) hoặc mép phải (> screenWidth - 40px)
+      isEdgeSwipe = startX <= 40 || startX >= screenWidth - 40;
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!isEdgeSwipe) return;
+      const touch = e.changedTouches[0];
+      const deltaX = touch.clientX - startX;
+      const deltaY = Math.abs(touch.clientY - startY);
+
+      // Cử chỉ vuốt ngang rõ rệt: độ dài ngang > 45px và độ lệch dọc < 60px
+      if (Math.abs(deltaX) > 45 && deltaY < 60) {
+        const handled = executeBackAction();
+        if (handled) {
+          armGuard();
+        } else {
+          window.history.go(-2);
+        }
+      }
+      isEdgeSwipe = false;
+    };
+
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
+
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchend', onTouchEnd);
+    };
+  }, []);
+
+  // Modal open helpers
   const openReaderModal = (idx: number) => {
     window.history.pushState({ modal: 'reader', idx }, '');
     setReaderChapterIndex(idx);
@@ -137,65 +279,13 @@ export const App: React.FC = () => {
   };
 
   const handleCloseActiveModal = () => {
-    // Nếu có lịch sử modal được pushState, gọi history.back() để đồng bộ stack
-    if (
-      readerChapterIndex !== null ||
-      isFullGlossaryOpen ||
-      projectModalMode !== null ||
-      editingPrompt !== undefined ||
-      editingGlossaryPair !== null
-    ) {
-      window.history.back();
-    }
+    // Đóng trực tiếp mọi modal đang mở
+    setReaderChapterIndex(null);
+    setIsFullGlossaryOpen(false);
+    setProjectModalMode(null);
+    setEditingPrompt(undefined);
+    setEditingGlossaryPair(null);
   };
-
-  useEffect(() => {
-    // Khởi tạo root state ban đầu
-    window.history.replaceState({ root: true, tab: activeTab }, '');
-
-    const handlePopState = () => {
-      // 1. Nếu đang mở modal đọc truyện -> Đóng modal đọc truyện
-      if (readerChapterIndex !== null) {
-        setReaderChapterIndex(null);
-        return;
-      }
-      // 2. Nếu đang mở bảng từ điển đầy đủ -> Đóng modal
-      if (isFullGlossaryOpen) {
-        setIsFullGlossaryOpen(false);
-        return;
-      }
-      // 3. Nếu đang mở modal chọn dự án -> Đóng modal
-      if (projectModalMode !== null) {
-        setProjectModalMode(null);
-        return;
-      }
-      // 4. Nếu đang mở modal prompt -> Đóng modal
-      if (editingPrompt !== undefined) {
-        setEditingPrompt(undefined);
-        return;
-      }
-      // 5. Nếu đang mở modal sửa từ điển -> Đóng modal
-      if (editingGlossaryPair !== null) {
-        setEditingGlossaryPair(null);
-        return;
-      }
-      // 6. Nếu đang ở các tab khác (Cài đặt, Key, Danh sách đọc) -> Vuốt back quay về Tab Dịch chính (Tab 1)
-      if (activeTab !== 1) {
-        setActiveTab(1);
-        return;
-      }
-    };
-
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, [
-    readerChapterIndex,
-    isFullGlossaryOpen,
-    projectModalMode,
-    editingPrompt,
-    editingGlossaryPair,
-    activeTab,
-  ]);
 
   const addLog = (text: string, type: 'info' | 'success' | 'warning' | 'error' | 'ai' = 'info') => {
     const newLog: LogMessage = {
@@ -960,6 +1050,15 @@ export const App: React.FC = () => {
           onSelectProject={handleSelectProject}
           onCreateProject={handleCreateProject}
         />
+      )}
+
+      {/* Native Android Double-Back Exit Toast */}
+      {showExitToast && (
+        <div className="fixed bottom-20 sm:bottom-24 left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-fade-in">
+          <div className="bg-[#222222]/95 text-white text-xs sm:text-sm font-medium px-4 py-2 rounded-full shadow-2xl border border-gray-700/70 backdrop-blur-md flex items-center gap-2">
+            <span>Vuốt hoặc bấm trở về lần nữa để thoát</span>
+          </div>
+        </div>
       )}
     </div>
   );
