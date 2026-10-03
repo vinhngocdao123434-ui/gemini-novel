@@ -107,33 +107,28 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
 
-    - name: 🐘 Set up Gradle Build Cache
-      uses: gradle/actions/setup-gradle@v4
-
     - name: 🟢 Set up Node.js 22
       uses: actions/setup-node@v4
       with:
         node-version: 22
 
-    - name: 🛠️ Build Web Assets & Initialize Android Platform
+    - name: 🛠️ Build Web Assets & Prepare Android
       run: |
         npm install
         npm run build
         if [ ! -f "android/gradlew" ]; then
-          echo "⚠️ android/gradlew not found in git repo. Auto-generating Android native platform..."
           rm -rf android
           npx cap add android
         fi
-        sed -i 's/compileSdkVersion = 36/compileSdkVersion = 35/g' android/variables.gradle 2>/dev/null || true
-        sed -i 's/targetSdkVersion = 36/targetSdkVersion = 35/g' android/variables.gradle 2>/dev/null || true
         yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses 2>/dev/null || true
+        "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" 2>/dev/null || true
         npx cap sync android
 
     - name: 🔨 Build Debug APK
       run: |
         cd android
         chmod +x gradlew
-        ./gradlew assembleDebug --no-daemon --stacktrace
+        ./gradlew assembleDebug --no-daemon
 
     - name: 📤 Upload Debug APK Artifact
       uses: actions/upload-artifact@v4
