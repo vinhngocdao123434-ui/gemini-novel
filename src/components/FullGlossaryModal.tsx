@@ -48,7 +48,15 @@ export const FullGlossaryModal: React.FC<FullGlossaryModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-3 sm:p-6 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-3 sm:p-6 backdrop-blur-sm"
+      style={{
+        paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))',
+        paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))',
+        paddingLeft: 'max(0.75rem, env(safe-area-inset-left, 0px))',
+        paddingRight: 'max(0.75rem, env(safe-area-inset-right, 0px))',
+      }}
+    >
       <div className="bg-[#141414] border border-[#30363d] rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-[#222] flex items-center justify-between">

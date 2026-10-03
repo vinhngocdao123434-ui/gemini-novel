@@ -30,7 +30,15 @@ export const PromptModal: React.FC<PromptModalProps> = ({ editingPrompt, onClose
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm"
+      style={{
+        paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))',
+        paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))',
+        paddingLeft: 'max(1rem, env(safe-area-inset-left, 0px))',
+        paddingRight: 'max(1rem, env(safe-area-inset-right, 0px))',
+      }}
+    >
       <div className="bg-[#141414] border border-[#30363d] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-fade-in">
         <div className="p-4 sm:p-5 border-b border-[#222] flex items-center justify-between">
           <div className="flex items-center gap-2">

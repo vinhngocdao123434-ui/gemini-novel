@@ -461,24 +461,22 @@ export function transliterateLeftoverHanzi(text: string): { result: string; repl
   let replacedCount = 0;
   let result = text;
 
-  // 1. Sửa lỗi dở dang nửa âm tiếng Việt ghép chữ Hán: ví dụ "Th硕" (Th + 硕/Thạc) -> "Thạc"
-  const halfSyllablePattern = /\b([A-ZÀ-Ỹ][a-zà-ỹ]*\s+)?(Th|Tr|Ch|Nh|Ph|Kh|Gh|Gi|Ng|Ngh|[B-ZĐ])([\u4e00-\u9fa5])/g;
-  result = result.replace(halfSyllablePattern, (match, prefix, initials, hanzi) => {
+  // Bước 1: Bắt chính xác cụm gõ dở: [Âm_tiếng_Việt_1_đến_3_chữ_cái][Chữ_Hán] (như "Th硕", "L林", "V王", "Tr陈")
+  result = result.replace(/([A-Za-zÀ-ỹ]{1,3})([\u4e00-\u9fa5])/g, (_match, prefixLetters, hanzi) => {
     const viReading = SINO_VIETNAMESE_MAP[hanzi];
     if (viReading) {
       replacedCount++;
-      const p = prefix ? prefix : '';
-      if (viReading.toLowerCase().startsWith(initials.toLowerCase())) {
-        return p + viReading;
+      // Nếu âm phiên âm bắt đầu bằng prefixLetters (vd: "Th" trùng đầu của "Thạc", "Tr" trùng "Trần")
+      if (viReading.toLowerCase().startsWith(prefixLetters.toLowerCase())) {
+        return viReading;
       }
-      return p + viReading;
+      return prefixLetters + ' ' + viReading;
     }
-    return match;
+    return _match;
   });
 
-  // 2. Thay thế toàn bộ các chữ Hán còn sót lại bằng âm Hán Việt chuẩn
-  const singleHanziPattern = /[\u4e00-\u9fa5]/g;
-  result = result.replace(singleHanziPattern, (hanzi) => {
+  // Bước 2: Thay thế toàn bộ các chữ Hán đơn lẻ còn sót lại
+  result = result.replace(/[\u4e00-\u9fa5]/g, (hanzi) => {
     if (SINO_VIETNAMESE_MAP[hanzi]) {
       replacedCount++;
       return SINO_VIETNAMESE_MAP[hanzi];

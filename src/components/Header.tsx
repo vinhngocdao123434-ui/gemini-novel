@@ -18,9 +18,16 @@ export const Header: React.FC<HeaderProps> = ({
   const activeKeysCount = apiKeys.filter((k) => k.state === 'ACTIVE').length;
 
   return (
-    <header className="bg-[#141414] border-b border-[#222222] px-4 py-3 sticky top-0 z-30 flex items-center justify-between shadow-md">
+    <header
+      className="bg-[#141414] border-b border-[#222222] px-4 py-3 sticky top-0 z-30 flex items-center justify-between shadow-md"
+      style={{
+        paddingTop: 'max(0.75rem, env(safe-area-inset-top, 0px))',
+        paddingLeft: 'max(1rem, env(safe-area-inset-left, 0px))',
+        paddingRight: 'max(1rem, env(safe-area-inset-right, 0px))',
+      }}
+    >
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white shadow-inner">
+        <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white shadow-inner shrink-0">
           <BookOpen className="w-4 h-4" />
         </div>
         <div>

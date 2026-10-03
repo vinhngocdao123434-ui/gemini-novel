@@ -1,4 +1,6 @@
 import { ApiKeyItem, AppSettings, ProjectData, PromptCardItem } from '../types';
+import { GlossaryManager } from './glossaryManager';
+import { transliterateLeftoverHanzi } from './sinoVietnameseDictionary';
 
 const STORAGE_KEYS = {
   SETTINGS: 'droid_app_settings',
@@ -22,7 +24,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   contextSnippetLength: 350,
   autoHealOffline: true,
   autoRetryCritical: true,
-  maxRetryAttempts: 2,
+  maxRetryAttempts: 3,
 };
 
 export const DEFAULT_PROMPT_CARDS: PromptCardItem[] = [
@@ -172,7 +174,20 @@ export function loadProjectData(projectName: string): ProjectData {
   try {
     const raw = localStorage.getItem(`${STORAGE_KEYS.PROJECT_PREFIX}${projectName}`);
     if (raw) {
-      return JSON.parse(raw);
+      const data: ProjectData = JSON.parse(raw);
+      // Tự động làm sạch Master Glossary và các bản dịch hiện hữu
+      if (data.masterGlossary) {
+        data.masterGlossary = GlossaryManager.cleanGlossaryMap(data.masterGlossary);
+      }
+      if (data.translatedChapters) {
+        for (const [idx, text] of Object.entries(data.translatedChapters)) {
+          if (text) {
+            const { result: cleanText } = transliterateLeftoverHanzi(text);
+            data.translatedChapters[Number(idx)] = cleanText;
+          }
+        }
+      }
+      return data;
     }
   } catch (e) {
     console.error(`Error loading project ${projectName}`, e);

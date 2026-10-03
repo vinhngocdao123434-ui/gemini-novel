@@ -1,23 +1,35 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { KeyRound, Play, BookOpen, Settings } from 'lucide-react';
-import { ApiKeyItem, AppSettings, LogMessage, ProjectData, PromptCardItem, ChapterAuditInfo } from './types';
 import {
-  loadSettings,
-  saveSettings,
-  loadApiKeys,
-  saveApiKeys,
-  loadPromptCards,
-  savePromptCards,
-  loadProjectData,
-  saveProjectData,
-  deleteProjectFromStorage,
+  BookOpen,
+  KeyRound,
+  Play,
+  Settings,
+} from 'lucide-react';
+import {
+  ApiKeyItem,
+  AppSettings,
+  ChapterAuditInfo,
+  LogMessage,
+  ProjectData,
+  PromptCardItem,
+} from './types';
+import {
   getInitialProjectData,
+  loadApiKeys,
+  loadProjectData,
+  loadPromptCards,
+  loadSettings,
+  saveApiKeys,
+  saveProjectData,
+  savePromptCards,
+  saveSettings,
 } from './utils/storage';
 import { GeminiEngine } from './utils/geminiEngine';
 import { GlossaryManager } from './utils/glossaryManager';
 import { ChapterAuditor } from './utils/chapterAuditor';
 import { downloadSourceCodeZip } from './utils/sourceExporter';
-import { RootBridge } from './utils/rootBridge';
+
+// Components
 import { Header } from './components/Header';
 import { TabKeys } from './components/TabKeys';
 import { TabTranslate } from './components/TabTranslate';
@@ -42,7 +54,7 @@ export const App: React.FC = () => {
     {
       id: '1',
       timestamp: new Date().toLocaleTimeString(),
-      text: '🚀 DroidTranslator Native V10.2: Tích hợp Bộ Kiểm Định Chất Lượng & Tự Sửa Offline Sẵn Sàng!',
+      text: '🚀 DroidTranslator Native V10.3: Khung Giao Diện An Toàn & Hỗ Trợ Cử Chỉ Vuốt Android Sẵn Sàng!',
       type: 'info',
     },
   ]);
@@ -89,6 +101,102 @@ export const App: React.FC = () => {
     engineRef.current.updateKeys(apiKeys);
   }, [apiKeys]);
 
+  // =========================================================================
+  // BỘ ĐIỀU HƯỚNG CỬ CHỈ ANDROID (ANDROID GESTURE BACK & HISTORY STACK)
+  // =========================================================================
+  const openReaderModal = (idx: number) => {
+    window.history.pushState({ modal: 'reader', idx }, '');
+    setReaderChapterIndex(idx);
+  };
+
+  const openFullGlossaryModal = () => {
+    window.history.pushState({ modal: 'glossary' }, '');
+    setIsFullGlossaryOpen(true);
+  };
+
+  const openProjectSwitchModal = (mode: 'switch' | 'new') => {
+    window.history.pushState({ modal: 'project', mode }, '');
+    setProjectModalMode(mode);
+  };
+
+  const openPromptEditModal = (p?: PromptCardItem) => {
+    window.history.pushState({ modal: 'prompt', id: p?.id }, '');
+    setEditingPrompt(p || null);
+  };
+
+  const openEditGlossaryTermModal = (raw: string, vi: string) => {
+    window.history.pushState({ modal: 'editGlossary', raw, vi }, '');
+    setEditingGlossaryPair({ raw, vi });
+  };
+
+  const switchTab = (newTab: number) => {
+    if (newTab !== activeTab) {
+      window.history.pushState({ tab: newTab }, '');
+      setActiveTab(newTab);
+    }
+  };
+
+  const handleCloseActiveModal = () => {
+    // Nếu có lịch sử modal được pushState, gọi history.back() để đồng bộ stack
+    if (
+      readerChapterIndex !== null ||
+      isFullGlossaryOpen ||
+      projectModalMode !== null ||
+      editingPrompt !== undefined ||
+      editingGlossaryPair !== null
+    ) {
+      window.history.back();
+    }
+  };
+
+  useEffect(() => {
+    // Khởi tạo root state ban đầu
+    window.history.replaceState({ root: true, tab: activeTab }, '');
+
+    const handlePopState = () => {
+      // 1. Nếu đang mở modal đọc truyện -> Đóng modal đọc truyện
+      if (readerChapterIndex !== null) {
+        setReaderChapterIndex(null);
+        return;
+      }
+      // 2. Nếu đang mở bảng từ điển đầy đủ -> Đóng modal
+      if (isFullGlossaryOpen) {
+        setIsFullGlossaryOpen(false);
+        return;
+      }
+      // 3. Nếu đang mở modal chọn dự án -> Đóng modal
+      if (projectModalMode !== null) {
+        setProjectModalMode(null);
+        return;
+      }
+      // 4. Nếu đang mở modal prompt -> Đóng modal
+      if (editingPrompt !== undefined) {
+        setEditingPrompt(undefined);
+        return;
+      }
+      // 5. Nếu đang mở modal sửa từ điển -> Đóng modal
+      if (editingGlossaryPair !== null) {
+        setEditingGlossaryPair(null);
+        return;
+      }
+      // 6. Nếu đang ở các tab khác (Cài đặt, Key, Danh sách đọc) -> Vuốt back quay về Tab Dịch chính (Tab 1)
+      if (activeTab !== 1) {
+        setActiveTab(1);
+        return;
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [
+    readerChapterIndex,
+    isFullGlossaryOpen,
+    projectModalMode,
+    editingPrompt,
+    editingGlossaryPair,
+    activeTab,
+  ]);
+
   const addLog = (text: string, type: 'info' | 'success' | 'warning' | 'error' | 'ai' = 'info') => {
     const newLog: LogMessage = {
       id: Math.random().toString(36).substring(2, 9),
@@ -133,47 +241,42 @@ export const App: React.FC = () => {
       projectList: newProjectList,
     }));
     setProjectData(initial);
-    saveProjectData(initial);
-    addLog(`📁 Đã tạo và chuyển sang dự án mới: ${name}`, 'success');
+    addLog(`✨ Đã tạo và chuyển sang dự án mới: [${name}]`, 'success');
   };
 
   const handleDeleteCurrentProject = () => {
+    const name = settings.currentProjectName;
     if (settings.projectList.length <= 1) {
       alert('Không thể xóa dự án duy nhất còn lại!');
       return;
     }
 
-    const confirmed = window.confirm(
-      `Bạn có chắc chắn muốn xóa dự án [${settings.currentProjectName}]?\n\n• Toàn bộ chương thô, bản dịch và từ điển riêng của truyện này sẽ bị xóa khỏi bộ nhớ máy.\n• Toàn bộ kho Key API và Thẻ Prompt sẽ ĐƯỢC BẢO TOÀN VĨNH CỬU 100%!`
-    );
-
+    const confirmed = window.confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn dự án [${name}] không?`);
     if (!confirmed) return;
 
-    const toDelete = settings.currentProjectName;
-    deleteProjectFromStorage(toDelete);
-    const remaining = settings.projectList.filter((p) => p !== toDelete);
-    const nextProj = remaining[0];
+    localStorage.removeItem(`droid_project_${name}`);
+    const remainingList = settings.projectList.filter((p) => p !== name);
+    const nextProjectName = remainingList[0];
+    const nextProjectData = loadProjectData(nextProjectName);
 
     setSettings((prev) => ({
       ...prev,
-      currentProjectName: nextProj,
-      projectList: remaining,
+      currentProjectName: nextProjectName,
+      projectList: remainingList,
     }));
-
-    const nextData = loadProjectData(nextProj);
-    setProjectData(nextData);
-    addLog(
-      `🗑️ Đã xóa vĩnh viễn dự án: ${toDelete}. Toàn bộ Key API và Prompt được bảo toàn 100%!`,
-      'warning'
-    );
+    setProjectData(nextProjectData);
+    addLog(`🗑️ Đã xóa dự án: [${name}], chuyển sang [${nextProjectName}]`, 'warning');
   };
 
-  /**
-   * Dịch một chương đơn lẻ kèm kiểm tra lỗi Offline và Auto-Retry ghi đè khi dính lỗi nặng
-   */
+  // =========================================================================
+  // CORE TRANSLATION LOOP WITH OFFLINE AUDITOR & AUTO-HEAL
+  // =========================================================================
   const translateSingleChapterWithAudit = async (chapIndex: number): Promise<boolean> => {
     const rawText = projectDataRef.current.rawChapters[chapIndex];
-    if (!rawText) return false;
+    if (!rawText || !rawText.trim()) {
+      addLog(`⚠️ Chương ${chapIndex + 1} trống nội dung gốc. Bỏ qua.`, 'warning');
+      return false;
+    }
 
     const model = settingsRef.current.currentModel;
     const targetLang = settingsRef.current.targetLanguage;
@@ -181,7 +284,6 @@ export const App: React.FC = () => {
     const minLen = settingsRef.current.minTermLength;
     const minFreq = settingsRef.current.minFrequency;
     const conflict = settingsRef.current.conflictPolicy;
-    const autoHeal = settingsRef.current.autoHealOffline;
     const autoRetry = settingsRef.current.autoRetryCritical;
     const maxAttempts = autoRetry ? (settingsRef.current.maxRetryAttempts || 2) + 1 : 1;
 
@@ -198,10 +300,8 @@ export const App: React.FC = () => {
     let prevSnippet: string | null = null;
     if (chapIndex > 0 && chapIndex - 1 in projectDataRef.current.translatedChapters) {
       const prevText = projectDataRef.current.translatedChapters[chapIndex - 1];
-      if (prevText && prevText.trim().length > 0) {
-        const takeLen = Math.min(prevText.length, 350);
-        prevSnippet = '...' + prevText.substring(prevText.length - takeLen).trim();
-      }
+      const snippetLen = settingsRef.current.contextSnippetLength || 350;
+      prevSnippet = prevText.slice(-snippetLen);
     }
 
     let attempt = 0;
@@ -238,9 +338,9 @@ export const App: React.FC = () => {
           (msg, type) => addLog(msg, type)
         );
 
-        // Bóc tách thuật ngữ mới
+        // Bóc tách thuật ngữ mới & làm sạch 100% Glossary
         const currentGlossary = { ...projectDataRef.current.masterGlossary };
-        const newlyAdded = GlossaryManager.mergeNewEntries(
+        GlossaryManager.mergeNewEntries(
           currentGlossary,
           newGlossaryBlock,
           rawText,
@@ -248,15 +348,15 @@ export const App: React.FC = () => {
           minFreq,
           conflict
         );
+        const sanitizedGlossary = GlossaryManager.cleanGlossaryMap(currentGlossary);
 
-        // Chạy kiểm tra chất lượng Offline (0% Token)
-        const audit = ChapterAuditor.auditChapter(rawText, translatedTextRaw, currentGlossary);
+        // Chạy kiểm tra chất lượng Offline & Phiên âm tự động (0% Token)
+        const audit = ChapterAuditor.auditChapter(rawText, translatedTextRaw, sanitizedGlossary);
 
-        let finalTranslated = translatedTextRaw;
+        // Luôn áp dụng văn bản đã được làm sạch và khử chữ Hán 100%
+        const finalTranslated = audit.cleanedText || translatedTextRaw;
 
-        // Nếu có lỗi nhẹ và bật Auto-Heal: Áp dụng văn bản đã dọn sạch
-        if (autoHeal && audit.healedActions.length > 0) {
-          finalTranslated = audit.cleanedText;
+        if (audit.healedActions.length > 0) {
           addLog(
             `🛠️ [Tự Sửa Offline] Chương ${chapIndex + 1}: ${audit.healedActions.join(', ')}`,
             'info'
@@ -286,7 +386,7 @@ export const App: React.FC = () => {
           }
         }
 
-        // Lưu bản dịch chương (dù hoàn hảo hay đã sửa, hoặc cần đánh dấu cờ lỗi)
+        // Lưu bản dịch chương (đã sạch 100%)
         const updatedChapters = {
           ...projectDataRef.current.translatedChapters,
           [chapIndex]: finalTranslated,
@@ -308,24 +408,19 @@ export const App: React.FC = () => {
         const updatedData: ProjectData = {
           ...projectDataRef.current,
           translatedChapters: updatedChapters,
-          masterGlossary: currentGlossary,
+          masterGlossary: sanitizedGlossary,
           chapterAuditStatus: updatedAuditStatus,
         };
 
         setProjectData(updatedData);
         projectDataRef.current = updatedData;
 
-        if (newlyAdded.length > 0) {
-          const names = newlyAdded.map((e) => `[${e.key} ➔ ${e.value}]`).join(' ');
-          addLog(`📚 Đã tự học ${newlyAdded.length} từ mới: ${names}`, 'success');
-        }
-
         if (!audit.hasCriticalError) {
           addLog(`✅ Hoàn tất Chương ${chapIndex + 1} (Chất lượng: ${audit.score}/100đ)`, 'success');
           chapterResolved = true;
           return true;
         } else {
-          chapterResolved = true; // Kết thúc chu kỳ cho chương này
+          chapterResolved = true;
           return false;
         }
       } catch (err: unknown) {
@@ -342,16 +437,17 @@ export const App: React.FC = () => {
     return false;
   };
 
-  // Translation Loop
   const startRangeTranslation = async (fromChap: number, toChap: number) => {
-    if (projectDataRef.current.rawChapters.length === 0) {
-      alert('Vui lòng nạp và tách chương trước!');
+    if (apiKeys.length === 0) {
+      alert('Vui lòng thêm ít nhất 1 Gemini API Key ở Tab 1!');
       return;
     }
 
-    if (apiKeys.length === 0) {
-      alert('Vui lòng thêm ít nhất 1 Gemini API Key ở Tab 1 (Key & Prompt)!');
-      setActiveTab(0);
+    const startIdx = Math.max(0, fromChap - 1);
+    const endIdx = Math.min(projectData.rawChapters.length - 1, toChap - 1);
+
+    if (startIdx > endIdx) {
+      alert('Khoảng chương không hợp lệ!');
       return;
     }
 
@@ -360,82 +456,70 @@ export const App: React.FC = () => {
     setIsTranslating(true);
     setIsPaused(false);
 
-    // Kích hoạt WakeLock giữ CPU luôn thức chống Deep Sleep khi tắt màn hình
-    RootBridge.acquireWakeLock().catch(() => {});
+    addLog(
+      `🚀 Bắt đầu tiến trình dịch tự động từ Chương ${fromChap} đến Chương ${toChap}...`,
+      'info'
+    );
 
-    let currentIdx = fromChap - 1;
-    const targetEndIdx = toChap;
-
-    addLog(`▶ Bắt đầu dịch Range: Chương ${fromChap} ➔ Chương ${toChap}...`, 'info');
-
-    while (
-      isTranslatingRef.current &&
-      currentIdx < targetEndIdx &&
-      currentIdx < projectDataRef.current.rawChapters.length
-    ) {
-      if (isPausedRef.current) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        continue;
+    for (let i = startIdx; i <= endIdx; i++) {
+      if (!isTranslatingRef.current) {
+        addLog('⏹ Tiến trình dịch đã bị hủy bởi người dùng.', 'warning');
+        break;
       }
 
-      setCurrentTranslatingIndex(currentIdx);
-      await translateSingleChapterWithAudit(currentIdx);
+      // Handle pause loop
+      while (isPausedRef.current && isTranslatingRef.current) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
 
-      currentIdx++;
-      const delay = settingsRef.current.delaySec || 2;
-      await new Promise((resolve) => setTimeout(resolve, delay * 1000));
+      if (!isTranslatingRef.current) break;
+
+      setCurrentTranslatingIndex(i);
+      await translateSingleChapterWithAudit(i);
+
+      // Delay between chapters
+      if (i < endIdx && isTranslatingRef.current) {
+        const delay = Math.max(1, settingsRef.current.delaySec || 2);
+        await new Promise((resolve) => setTimeout(resolve, delay * 1000));
+      }
     }
 
-    if (currentIdx >= targetEndIdx) {
-      addLog(`🎉 Đã hoàn thành khoảng chương yêu cầu!`, 'success');
-    }
-
-    RootBridge.releaseWakeLock().catch(() => {});
     isTranslatingRef.current = false;
-    isPausedRef.current = false;
     setIsTranslating(false);
-    setIsPaused(false);
+    addLog('🎉 Đã hoàn thành dải chương được chỉ định!', 'success');
   };
 
   const handleTogglePause = () => {
     const nextPaused = !isPaused;
-    isPausedRef.current = nextPaused;
     setIsPaused(nextPaused);
-    if (nextPaused) {
-      RootBridge.releaseWakeLock().catch(() => {});
-      addLog(`⏸ Đã tạm dừng tại Chương ${currentTranslatingIndex + 1}.`, 'warning');
-    } else {
-      RootBridge.acquireWakeLock().catch(() => {});
-      addLog(`▶ Tiếp tục dịch lại Chương ${currentTranslatingIndex + 1}...`, 'info');
-    }
+    isPausedRef.current = nextPaused;
+    addLog(nextPaused ? '⏸ Đã tạm dừng tiến trình dịch.' : '▶ Tiếp tục tiến trình dịch...', 'warning');
   };
 
   const handleCancelTranslation = () => {
-    RootBridge.releaseWakeLock().catch(() => {});
     isTranslatingRef.current = false;
     isPausedRef.current = false;
     setIsTranslating(false);
     setIsPaused(false);
-    addLog(`⏹ Đã hủy tiến trình dịch.`, 'warning');
+    addLog('⏹ Đã yêu cầu dừng toàn bộ tiến trình dịch.', 'warning');
   };
 
   /**
-   * Quét kiểm định chất lượng toàn bộ các chương đã dịch Offline (100% không tốn token)
+   * Quét toàn bộ các chương đã dịch bằng bộ Offline Auditor (0% Token)
    */
   const handleScanAllChaptersQuality = () => {
     const translatedMap = projectData.translatedChapters;
     const totalTranslated = Object.keys(translatedMap).length;
+
     if (totalTranslated === 0) {
-      alert('Chưa có chương nào được dịch trong dự án này!');
+      alert('Chưa có chương nào được dịch để kiểm định!');
       return;
     }
 
     setIsScanningQuality(true);
-    addLog(`🔍 Đang quét kiểm định chất lượng offline toàn bộ ${totalTranslated} chương...`, 'info');
+    addLog(`🔍 Bắt đầu quét kiểm định Offline toàn bộ ${totalTranslated} chương...`, 'info');
 
-    const updatedAuditStatus: Record<number, ChapterAuditInfo> = {
-      ...(projectData.chapterAuditStatus || {}),
-    };
+    const updatedAuditStatus: Record<number, ChapterAuditInfo> = {};
     let countGood = 0;
     let countHealed = 0;
     let countCritical = 0;
@@ -500,49 +584,50 @@ export const App: React.FC = () => {
       .filter((idx) => auditMap[idx]?.status === 'critical');
 
     if (errorIndices.length === 0) {
-      alert('Không có chương nào bị lỗi nặng! Toàn bộ bản dịch đều đạt chuẩn.');
-      return;
-    }
-
-    if (apiKeys.length === 0) {
-      alert('Vui lòng thêm ít nhất 1 Gemini API Key ở Tab 1 để dịch lại!');
-      setActiveTab(0);
+      alert('Không có chương nào bị đánh dấu Lỗi nặng cần dịch lại!');
       return;
     }
 
     const confirmed = window.confirm(
-      `Tìm thấy ${errorIndices.length} chương bị lỗi nặng (Chương: ${errorIndices
-        .map((i) => i + 1)
-        .join(', ')}).\n\nBạn có muốn tự động gửi Gemini dịch lại để ghi đè toàn bộ các chương này không?`
+      `Tìm thấy ${errorIndices.length} chương lỗi nặng. Bạn có muốn bắt đầu tự động gửi Gemini dịch lại toàn bộ các chương này và ghi đè không?`
     );
-
     if (!confirmed) return;
 
     isTranslatingRef.current = true;
+    isPausedRef.current = false;
     setIsTranslating(true);
-    addLog(`⚡ Bắt đầu tiến trình dịch lại ${errorIndices.length} chương lỗi để ghi đè...`, 'warning');
+    setIsPaused(false);
+
+    addLog(`🔄 Bắt đầu chu trình dịch lại ${errorIndices.length} chương bị lỗi nặng...`, 'info');
 
     for (const idx of errorIndices) {
       if (!isTranslatingRef.current) break;
+      while (isPausedRef.current && isTranslatingRef.current) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      if (!isTranslatingRef.current) break;
+
       setCurrentTranslatingIndex(idx);
       await translateSingleChapterWithAudit(idx);
-      const delay = settingsRef.current.delaySec || 2;
-      await new Promise((resolve) => setTimeout(resolve, delay * 1000));
+
+      if (isTranslatingRef.current) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
     }
 
     isTranslatingRef.current = false;
     setIsTranslating(false);
-    addLog(`🎉 Đã hoàn tất tiến trình dịch lại các chương lỗi!`, 'success');
+    addLog(`🎉 Đã hoàn tất sửa chữa và dịch lại ${errorIndices.length} chương lỗi!`, 'success');
   };
 
   /**
-   * Sửa lỗi offline cho 1 chương duy nhất
+   * Sửa chữa 1 chương duy nhất Offline (0% Token)
    */
   const handleHealSingleChapterOffline = (chapIndex: number) => {
-    const rawText = projectData.rawChapters[chapIndex] || '';
-    const transText = projectData.translatedChapters[chapIndex] || '';
+    const transText = projectData.translatedChapters[chapIndex];
     if (!transText) return;
 
+    const rawText = projectData.rawChapters[chapIndex] || '';
     const { cleaned, healedActions } = ChapterAuditor.cleanChapterOffline(
       transText,
       projectData.masterGlossary
@@ -650,27 +735,34 @@ export const App: React.FC = () => {
   // Download Full Source Code Zip
   const handleDownloadSourceCode = async () => {
     try {
-      addLog('📦 Đang đóng gói toàn bộ mã nguồn React + Vite + TypeScript...', 'info');
+      addLog('📦 Đang đóng gói toàn bộ mã nguồn React SPA thành file .zip...', 'info');
       await downloadSourceCodeZip();
-      addLog('🎉 Đã tải xuống thành công file droidtranslator-web-source.zip!', 'success');
+      addLog('🎉 Đã tải xuống gói mã nguồn DroidTranslator_Full_Source.zip!', 'success');
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      addLog(`❌ Lỗi đóng gói mã nguồn: ${errorMsg}`, 'error');
+      addLog(`❌ Lỗi đóng gói source code: ${errorMsg}`, 'error');
+      alert(`Lỗi đóng gói source code: ${errorMsg}`);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-gray-100 flex flex-col font-sans">
-      {/* Top Header Bar */}
+    <div className="min-h-screen bg-[#0a0a0a] text-gray-100 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
+      {/* Top Header with Safe Area Inset */}
       <Header
         settings={settings}
         apiKeys={apiKeys}
-        onOpenProjectModal={() => setProjectModalMode('switch')}
+        onOpenProjectModal={() => openProjectSwitchModal('switch')}
         onDownloadSourceCode={handleDownloadSourceCode}
       />
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-5xl w-full mx-auto p-3 sm:p-6 pb-24 sm:pb-28">
+      {/* Main Container with Safe Area Padding */}
+      <main
+        className="flex-1 max-w-5xl w-full mx-auto p-3 sm:p-6 pb-28 sm:pb-32"
+        style={{
+          paddingLeft: 'max(0.75rem, env(safe-area-inset-left, 0px))',
+          paddingRight: 'max(0.75rem, env(safe-area-inset-right, 0px))',
+        }}
+      >
         {activeTab === 0 && (
           <TabKeys
             settings={settings}
@@ -680,7 +772,7 @@ export const App: React.FC = () => {
             onUpdateSettings={handleUpdateSettings}
             onUpdateKeys={setApiKeys}
             onUpdatePrompts={setPromptCards}
-            onOpenPromptModal={(p) => setEditingPrompt(p || null)}
+            onOpenPromptModal={(p) => openPromptEditModal(p || undefined)}
             onAddLog={addLog}
           />
         )}
@@ -697,10 +789,10 @@ export const App: React.FC = () => {
             onStartRangeTranslation={startRangeTranslation}
             onTogglePause={handleTogglePause}
             onCancelTranslation={handleCancelTranslation}
-            onOpenProjectModal={() => setProjectModalMode('switch')}
-            onOpenNewProjectModal={() => setProjectModalMode('new')}
-            onOpenFullGlossary={() => setIsFullGlossaryOpen(true)}
-            onOpenEditGlossaryModal={(raw, vi) => setEditingGlossaryPair({ raw, vi })}
+            onOpenProjectModal={() => openProjectSwitchModal('switch')}
+            onOpenNewProjectModal={() => openProjectSwitchModal('new')}
+            onOpenFullGlossary={openFullGlossaryModal}
+            onOpenEditGlossaryModal={(raw, vi) => openEditGlossaryTermModal(raw, vi)}
             onAddLog={addLog}
           />
         )}
@@ -711,7 +803,7 @@ export const App: React.FC = () => {
             isTranslating={isTranslating}
             currentTranslatingIndex={currentTranslatingIndex}
             isScanningQuality={isScanningQuality}
-            onOpenReader={(idx) => setReaderChapterIndex(idx)}
+            onOpenReader={(idx) => openReaderModal(idx)}
             onExportFullNovel={handleExportFullNovel}
             onScanAllQuality={handleScanAllChaptersQuality}
             onRetranslateErrors={handleRetranslateErrorChapters}
@@ -723,8 +815,8 @@ export const App: React.FC = () => {
             settings={settings}
             projectData={projectData}
             onUpdateSettings={handleUpdateSettings}
-            onOpenProjectModal={() => setProjectModalMode('switch')}
-            onOpenNewProjectModal={() => setProjectModalMode('new')}
+            onOpenProjectModal={() => openProjectSwitchModal('switch')}
+            onOpenNewProjectModal={() => openProjectSwitchModal('new')}
             onDeleteCurrentProject={handleDeleteCurrentProject}
             onExportFullNovel={handleExportFullNovel}
             onDownloadSourceCode={handleDownloadSourceCode}
@@ -733,11 +825,18 @@ export const App: React.FC = () => {
         )}
       </main>
 
-      {/* Bottom Fixed Tab Navigation (matching exact 4 tabs of original app) */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#141414] border-t border-[#222] backdrop-blur-md shadow-lg">
+      {/* Bottom Fixed Tab Navigation with Android Safe-Area Inset Support */}
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-40 bg-[#141414] border-t border-[#222] backdrop-blur-md shadow-lg"
+        style={{
+          paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0px))',
+          paddingLeft: 'max(0.5rem, env(safe-area-inset-left, 0px))',
+          paddingRight: 'max(0.5rem, env(safe-area-inset-right, 0px))',
+        }}
+      >
         <div className="max-w-md mx-auto grid grid-cols-4 py-2 px-1">
           <button
-            onClick={() => setActiveTab(0)}
+            onClick={() => switchTab(0)}
             className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-lg transition cursor-pointer ${
               activeTab === 0 ? 'text-blue-400 font-bold' : 'text-gray-400 hover:text-gray-200'
             }`}
@@ -747,7 +846,7 @@ export const App: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setActiveTab(1)}
+            onClick={() => switchTab(1)}
             className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-lg transition cursor-pointer relative ${
               activeTab === 1 ? 'text-blue-400 font-bold' : 'text-gray-400 hover:text-gray-200'
             }`}
@@ -760,7 +859,7 @@ export const App: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setActiveTab(2)}
+            onClick={() => switchTab(2)}
             className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-lg transition cursor-pointer ${
               activeTab === 2 ? 'text-blue-400 font-bold' : 'text-gray-400 hover:text-gray-200'
             }`}
@@ -770,7 +869,7 @@ export const App: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setActiveTab(3)}
+            onClick={() => switchTab(3)}
             className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-lg transition cursor-pointer ${
               activeTab === 3 ? 'text-blue-400 font-bold' : 'text-gray-400 hover:text-gray-200'
             }`}
@@ -786,7 +885,7 @@ export const App: React.FC = () => {
         <FullScreenReaderModal
           projectData={projectData}
           chapterIndex={readerChapterIndex}
-          onClose={() => setReaderChapterIndex(null)}
+          onClose={handleCloseActiveModal}
           onNavigateChapter={(newIdx) => setReaderChapterIndex(newIdx)}
           onHealCurrentChapterOffline={handleHealSingleChapterOffline}
           onRetranslateCurrentChapter={handleRetranslateSingleChapter}
@@ -797,9 +896,9 @@ export const App: React.FC = () => {
       {isFullGlossaryOpen && (
         <FullGlossaryModal
           projectData={projectData}
-          onClose={() => setIsFullGlossaryOpen(false)}
+          onClose={handleCloseActiveModal}
           onUpdateGlossary={(updated) => handleUpdateProjectData({ masterGlossary: updated })}
-          onOpenEditModal={(raw, vi) => setEditingGlossaryPair({ raw, vi })}
+          onOpenEditModal={(raw, vi) => openEditGlossaryTermModal(raw, vi)}
           onExportGlossary={() => {
             const lines = Object.entries(projectData.masterGlossary).map(([k, v]) => `${k}=${v}`);
             navigator.clipboard.writeText(lines.join('\n'));
@@ -813,7 +912,7 @@ export const App: React.FC = () => {
         <EditGlossaryModal
           initialRaw={editingGlossaryPair.raw}
           initialVi={editingGlossaryPair.vi}
-          onClose={() => setEditingGlossaryPair(null)}
+          onClose={handleCloseActiveModal}
           onSave={(oldRaw, newRaw, newVi) => {
             const updated = { ...projectData.masterGlossary };
             if (oldRaw !== newRaw) delete updated[oldRaw];
@@ -828,7 +927,7 @@ export const App: React.FC = () => {
       {editingPrompt !== undefined && (
         <PromptModal
           editingPrompt={editingPrompt}
-          onClose={() => setEditingPrompt(undefined)}
+          onClose={handleCloseActiveModal}
           onSave={(title, content) => {
             if (editingPrompt) {
               const updated = promptCards.map((p) =>
@@ -857,7 +956,7 @@ export const App: React.FC = () => {
           mode={projectModalMode}
           currentProject={settings.currentProjectName}
           projectList={settings.projectList}
-          onClose={() => setProjectModalMode(null)}
+          onClose={handleCloseActiveModal}
           onSelectProject={handleSelectProject}
           onCreateProject={handleCreateProject}
         />

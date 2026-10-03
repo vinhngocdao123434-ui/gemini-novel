@@ -1,4 +1,5 @@
 import { GlossaryEntry } from '../types';
+import { transliterateLeftoverHanzi } from './sinoVietnameseDictionary';
 
 export class GlossaryManager {
   /**
@@ -54,7 +55,7 @@ export class GlossaryManager {
   }
 
   /**
-   * Phân tích một dòng thuật ngữ kèm kiểm tra điều kiện nghiêm ngặt
+   * Phân tích một dòng thuật ngữ kèm kiểm tra điều kiện nghiêm ngặt & tự động khử chữ Hán trong nghĩa dịch
    */
   public static parseLine(
     line: string | null | undefined,
@@ -85,7 +86,7 @@ export class GlossaryManager {
       let val = this.cleanTerm(parts[1]);
 
       if (raw.length > 0 && val.length > 0) {
-        // 1. CHỐNG ĐẢO NGƯỢC: Nếu val chứa chữ Hán còn raw không chứa chữ Hán -> tự động hoán đổi lại đúng vị trí!
+        // 1. CHỐNG ĐẢO NGƯỢC: Nếu val chứa chữ Hán còn raw không chứa chữ Hán -> hoán đổi lại
         const chineseInRaw = this.countChineseChars(raw);
         const chineseInVal = this.countChineseChars(val);
         if (chineseInVal > 0 && chineseInRaw === 0) {
@@ -94,13 +95,19 @@ export class GlossaryManager {
           val = temp;
         }
 
-        // 2. LỌC ĐỘ DÀI: Tuân thủ cài đặt minTermLength (mặc định: >= 2 ký tự chữ Hán)
+        // 2. KHỬ CHỮ HÁN TRONG NGHĨA DỊCH (VAL): Nếu val chứa chữ Hán (như "Trần Th硕") -> tự động phiên âm thành "Trần Thạc"
+        if (this.countChineseChars(val) > 0) {
+          const { result: cleanVal } = transliterateLeftoverHanzi(val);
+          val = cleanVal;
+        }
+
+        // 3. LỌC ĐỘ DÀI: Bắt buộc từ >= minTermLength ký tự chữ Hán
         const finalChineseCount = this.countChineseChars(raw);
         if (finalChineseCount < (minTermLength > 0 ? minTermLength : 2)) {
           return null;
         }
 
-        // 3. ĐIỀU KIỆN TẦN SUẤT: Phải xuất hiện từ minFrequency lần trở lên trong văn bản gốc
+        // 4. ĐIỀU KIỆN TẦN SUẤT: Phải xuất hiện từ minFrequency lần trở lên trong văn bản gốc
         if (chapterRawText && chapterRawText.length > 0) {
           const occ = this.countOccurrences(chapterRawText, raw);
           if (occ < (minFrequency > 0 ? minFrequency : 2)) {
@@ -144,13 +151,34 @@ export class GlossaryManager {
   }
 
   /**
-   * Chuyển bảng từ điển thành chuỗi text định dạng `key = value`
+   * Tự động làm sạch toàn bộ từ điển dự án (Sanitize Master Glossary)
+   */
+  public static cleanGlossaryMap(map: Record<string, string>): Record<string, string> {
+    const cleaned: Record<string, string> = {};
+    for (let [k, v] of Object.entries(map || {})) {
+      if (!k || !v) continue;
+      k = this.cleanTerm(k);
+      v = this.cleanTerm(v);
+      if (this.countChineseChars(v) > 0) {
+        const { result: cleanVal } = transliterateLeftoverHanzi(v);
+        v = cleanVal;
+      }
+      if (k && v && this.countChineseChars(v) === 0) {
+        cleaned[k] = v;
+      }
+    }
+    return cleaned;
+  }
+
+  /**
+   * Chuyển bảng từ điển thành chuỗi text định dạng `key = value` (đã lọc sạch 100% chữ Hán trong cột nghĩa)
    */
   public static getGlossaryAsString(map: Record<string, string>): string {
     if (!map || Object.keys(map).length === 0) {
       return '';
     }
-    return Object.entries(map)
+    const sanitized = this.cleanGlossaryMap(map);
+    return Object.entries(sanitized)
       .map(([k, v]) => `${k} = ${v}`)
       .join('\n');
   }

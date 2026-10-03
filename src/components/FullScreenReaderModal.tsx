@@ -75,8 +75,15 @@ export const FullScreenReaderModal: React.FC<FullScreenReaderModalProps> = ({
 
   return (
     <div className={`fixed inset-0 z-50 flex flex-col ${containerBg} animate-fade-in`}>
-      {/* 1. Reader Top Bar */}
-      <div className={`px-4 py-3 border-b flex items-center justify-between shadow-sm ${barBg}`}>
+      {/* 1. Reader Top Bar with Android Notch / Status Bar Safe-Area Support */}
+      <div
+        className={`px-4 py-3 border-b flex items-center justify-between shadow-sm ${barBg}`}
+        style={{
+          paddingTop: 'max(0.75rem, env(safe-area-inset-top, 0px))',
+          paddingLeft: 'max(1rem, env(safe-area-inset-left, 0px))',
+          paddingRight: 'max(1rem, env(safe-area-inset-right, 0px))',
+        }}
+      >
         <div className="flex items-center gap-2 min-w-0 pr-2">
           <h2 className="text-sm sm:text-base font-bold truncate">
             {projectData.projectName} · Chương {chapterIndex + 1} / {total}
@@ -131,6 +138,7 @@ export const FullScreenReaderModal: React.FC<FullScreenReaderModalProps> = ({
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-900/50 transition cursor-pointer"
+            title="Đóng trình đọc"
           >
             <X className="w-4 h-4" />
           </button>
@@ -163,34 +171,34 @@ export const FullScreenReaderModal: React.FC<FullScreenReaderModalProps> = ({
               mode === 'original' ? buttonActive : buttonInactive
             }`}
           >
-            Nguyên Tác
+            Gốc (Raw)
           </button>
         </div>
 
-        {/* Theme & Font Controls */}
+        {/* Theme and Size */}
         <div className="flex items-center gap-3">
           {/* Themes */}
           <div className="flex items-center gap-1">
             <button
               onClick={() => setTheme('amoled')}
-              className={`px-2 py-1 rounded-md font-semibold transition cursor-pointer ${
-                theme === 'amoled' ? 'bg-zinc-800 text-white border border-zinc-600' : 'bg-zinc-900 text-gray-400'
+              className={`px-2 py-0.5 rounded font-semibold text-[11px] transition cursor-pointer ${
+                theme === 'amoled' ? 'bg-zinc-800 text-white border border-zinc-600' : 'text-gray-400'
               }`}
             >
               AMOLED
             </button>
             <button
               onClick={() => setTheme('sepia')}
-              className={`px-2 py-1 rounded-md font-semibold transition cursor-pointer ${
-                theme === 'sepia' ? 'bg-[#8c5e32] text-white' : 'bg-[#e5d4b5] text-[#3d2e1e]'
+              className={`px-2 py-0.5 rounded font-semibold text-[11px] transition cursor-pointer ${
+                theme === 'sepia' ? 'bg-[#e5d4b5] text-[#3d2e1e] border border-[#c4af89]' : 'text-gray-400'
               }`}
             >
               Sepia
             </button>
             <button
               onClick={() => setTheme('light')}
-              className={`px-2 py-1 rounded-md font-semibold transition cursor-pointer ${
-                theme === 'light' ? 'bg-white text-black border border-gray-400' : 'bg-gray-300 text-gray-800'
+              className={`px-2 py-0.5 rounded font-semibold text-[11px] transition cursor-pointer ${
+                theme === 'light' ? 'bg-white text-black border border-gray-300' : 'text-gray-400'
               }`}
             >
               Sáng
@@ -230,14 +238,21 @@ export const FullScreenReaderModal: React.FC<FullScreenReaderModalProps> = ({
       <div className="flex-1 overflow-y-auto px-4 sm:px-12 md:px-24 py-8">
         <div
           style={{ fontSize: `${fontSize}px`, lineHeight: 1.8 }}
-          className="max-w-4xl mx-auto whitespace-pre-wrap font-sans select-text tracking-normal"
+          className="max-w-4xl mx-auto whitespace-pre-wrap font-sans reader-content select-text tracking-normal"
         >
           {getDisplayText()}
         </div>
       </div>
 
-      {/* 4. Reader Bottom Navigation Bar */}
-      <div className={`px-4 py-3 border-t flex items-center justify-between ${barBg}`}>
+      {/* 4. Reader Bottom Navigation Bar with Safe Area */}
+      <div
+        className={`px-4 py-3 border-t flex items-center justify-between ${barBg}`}
+        style={{
+          paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))',
+          paddingLeft: 'max(1rem, env(safe-area-inset-left, 0px))',
+          paddingRight: 'max(1rem, env(safe-area-inset-right, 0px))',
+        }}
+      >
         <button
           onClick={() => onNavigateChapter(chapterIndex - 1)}
           disabled={chapterIndex <= 0}
