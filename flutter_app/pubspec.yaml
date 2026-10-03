@@ -1,0 +1,40 @@
+name: droidtranslator_novel
+description: "DroidTranslator Native - Professional AI Novel Translation Workstation for Android"
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # AI & Network
+  http: ^1.2.0
+
+  # Storage & Filesystem
+  path_provider: ^2.1.2
+  file_picker: ^8.0.0
+  permission_handler: ^11.3.0
+  shared_preferences: ^2.2.2
+  archive: ^3.4.10
+
+  # Background Immortal Service & WakeLock
+  flutter_foreground_task: ^6.1.0
+  wakelock_plus: ^1.2.2
+
+  # UI & State
+  provider: ^6.1.2
+  lucide_icons: ^0.257.0
+  google_fonts: ^6.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

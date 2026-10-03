@@ -27,7 +27,7 @@ import {
 import { GeminiEngine } from './utils/geminiEngine';
 import { GlossaryManager } from './utils/glossaryManager';
 import { ChapterAuditor } from './utils/chapterAuditor';
-import { downloadSourceCodeZip } from './utils/sourceExporter';
+import { downloadSourceCodeZip, downloadFlutterNativeZip } from './utils/sourceExporter';
 
 // Components
 import { Header } from './components/Header';
@@ -822,6 +822,18 @@ export const App: React.FC = () => {
     }
   };
 
+  // Download 100% Flutter Android Native Source Code Zip
+  const handleDownloadFlutterCode = async () => {
+    try {
+      addLog('📱 Đang đóng gói toàn bộ mã nguồn Flutter Android Native 100%...', 'info');
+      await downloadFlutterNativeZip();
+      addLog('🎉 Đã tải xuống gói mã nguồn droidtranslator-flutter-native.zip thành công!', 'success');
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      addLog(`❌ Lỗi tải mã nguồn Flutter: ${errorMsg}`, 'error');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-gray-100 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
       {/* Top Header with Safe Area Inset */}
@@ -897,6 +909,7 @@ export const App: React.FC = () => {
             onDeleteCurrentProject={handleDeleteCurrentProject}
             onExportFullNovel={handleExportFullNovel}
             onDownloadSourceCode={handleDownloadSourceCode}
+            onDownloadFlutterCode={handleDownloadFlutterCode}
             onAddLog={addLog}
           />
         )}

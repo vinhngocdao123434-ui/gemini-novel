@@ -313,3 +313,51 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     URL.revokeObjectURL(url);
   }, 180000);
 }
+
+/**
+ * Xuất toàn bộ gói mã nguồn Flutter Android Native 100%
+ */
+export async function downloadFlutterNativeZip(): Promise<void> {
+  const zip = new JSZip();
+
+  const fetchFile = async (path: string): Promise<string> => {
+    try {
+      const resp = await fetch(path);
+      if (resp.ok) return await resp.text();
+    } catch {}
+    return '';
+  };
+
+  const flutterFiles = [
+    'flutter_app/pubspec.yaml',
+    'flutter_app/README.md',
+    'flutter_app/android/app/src/main/AndroidManifest.xml',
+    'flutter_app/lib/main.dart',
+    'flutter_app/lib/models/app_models.dart',
+    'flutter_app/lib/services/gemini_service.dart',
+    'flutter_app/lib/services/storage_service.dart',
+    'flutter_app/lib/services/root_service.dart',
+    'flutter_app/lib/services/chapter_auditor.dart',
+  ];
+
+  for (const filePath of flutterFiles) {
+    const text = await fetchFile(`/${filePath}`);
+    if (text) {
+      const relativeInZip = filePath.replace('flutter_app/', '');
+      zip.file(relativeInZip, text);
+    }
+  }
+
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'droidtranslator-flutter-native.zip';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 180000);
+}

@@ -23,6 +23,7 @@ interface TabSettingsProps {
   onDeleteCurrentProject: () => void;
   onExportFullNovel: () => void;
   onDownloadSourceCode?: () => void;
+  onDownloadFlutterCode?: () => void;
   onAddLog: (msg: string, type?: 'info' | 'success' | 'warning' | 'error' | 'ai') => void;
 }
 
@@ -42,6 +43,7 @@ export const TabSettings: React.FC<TabSettingsProps> = ({
   onDeleteCurrentProject,
   onExportFullNovel,
   onDownloadSourceCode,
+  onDownloadFlutterCode,
   onAddLog,
 }) => {
   const [customMinTermInput, setCustomMinTermInput] = useState<string>(String(settings.minTermLength));
@@ -434,6 +436,16 @@ export const TabSettings: React.FC<TabSettingsProps> = ({
             >
               <Download className="w-4 h-4" />
               <span>📦 Tải Xuống Toàn Bộ Mã Nguồn Web App (.ZIP)</span>
+            </button>
+          )}
+
+          {onDownloadFlutterCode && (
+            <button
+              onClick={onDownloadFlutterCode}
+              className="w-full py-2.5 bg-blue-900/60 hover:bg-blue-800 text-blue-200 border border-blue-500/40 text-xs font-bold rounded-lg transition cursor-pointer flex items-center justify-center gap-2"
+            >
+              <Download className="w-4 h-4" />
+              <span>📱 Tải Xuống Toàn Bộ Mã Nguồn Flutter Android Native (.ZIP)</span>
             </button>
           )}
         </div>

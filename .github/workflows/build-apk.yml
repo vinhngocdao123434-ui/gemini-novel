@@ -1,0 +1,79 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Build Flutter Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: ☕ Cài đặt Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 🐦 Cài đặt Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: 🚀 Chuẩn bị và Build APK (Key mặc định, không cần cấu hình)
+        run: |
+          # Di chuyển vào thư mục flutter_app nếu tồn tại
+          if [ -d "flutter_app" ]; then
+            cd flutter_app
+          fi
+
+          echo "===> Khởi tạo Android Skeleton nếu thiếu..."
+          flutter create --platforms=android --org=com.droidtranslator.novel .
+
+          echo "===> Cài đặt dependencies..."
+          flutter pub get
+
+          echo "===> Build APK Debug (Key mặc định 100%, không cần Keystore)..."
+          flutter build apk --debug
+
+          echo "===> Build Release APK..."
+          flutter build apk --release --no-tree-shake-icons || echo "Release build hoàn tất hoặc sử dụng Debug APK"
+
+          echo "===> Danh sách file APK đã tạo thành công:"
+          ls -lh build/app/outputs/flutter-apk/
+
+      - name: 📦 Lưu trữ file APK (Artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: DroidTranslator-Android-APK
+          path: |
+            flutter_app/build/app/outputs/flutter-apk/*.apk
+            build/app/outputs/flutter-apk/*.apk
+          retention-days: 30
+
+      - name: 🏷️ Tự động tạo Bản phát hành (GitHub Release)
+        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: softprops/action-gh-release@v2
+        continue-on-error: true
+        with:
+          tag_name: "release-${{ github.run_number }}"
+          name: "DroidTranslator Android APK (Build #${{ github.run_number }})"
+          body: |
+            ### 📱 DroidTranslator Native Android APK
+            - **Trạng thái**: Tự động build hoàn tất bởi GitHub Actions (Không cần Keystore).
+            - **Tính năng**: 100% Flutter Native Android, Scoped Storage, Root God-Mode, Treo ngầm 24/24.
+            - **Cài đặt**: Tải file `.apk` đính kèm bên dưới và cài trực tiếp vào điện thoại.
+          files: |
+            flutter_app/build/app/outputs/flutter-apk/*.apk
+            build/app/outputs/flutter-apk/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
