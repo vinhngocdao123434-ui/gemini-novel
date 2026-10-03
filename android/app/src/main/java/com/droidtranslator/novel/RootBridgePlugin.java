@@ -1,11 +1,15 @@
 package com.droidtranslator.novel;
 
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
 import android.os.PowerManager;
 import android.os.Process;
+import android.provider.MediaStore;
 import android.provider.Settings;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -15,7 +19,10 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 
 @CapacitorPlugin(name = "RootBridge")
 public class RootBridgePlugin extends Plugin {
@@ -189,6 +196,93 @@ public class RootBridgePlugin extends Plugin {
             call.resolve(ret);
         } catch (Exception e) {
             call.reject(e.getMessage());
+        }
+    }
+
+    /**
+     * Ghi file trực tiếp vào bộ nhớ Android (/storage/emulated/0/Download/)
+     * Sử dụng MediaStore API chuẩn của Android 10-16 (Không cần quyền hỏi phiền toái)
+     * Hoặc ghi trực tiếp bằng quyền Root / File API
+     */
+    @PluginMethod
+    public void saveFileToAndroidStorage(PluginCall call) {
+        String filename = call.getString("filename", "novel_translated.txt");
+        String content = call.getString("content", "");
+
+        try {
+            boolean written = false;
+            String savedPath = "";
+
+            // 1. Android 10+ (API 29+): MediaStore Scoped Storage
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentResolver resolver = getContext().getContentResolver();
+                ContentValues contentValues = new ContentValues();
+                contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, filename);
+                contentValues.put(MediaStore.MediaColumns.MIME_TYPE, "text/plain");
+                contentValues.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+
+                Uri uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues);
+                if (uri != null) {
+                    OutputStream os = resolver.openOutputStream(uri);
+                    if (os != null) {
+                        os.write(content.getBytes(StandardCharsets.UTF_8));
+                        os.flush();
+                        os.close();
+                        written = true;
+                        savedPath = "/storage/emulated/0/Download/" + filename;
+                    }
+                }
+            }
+
+            // 2. Android 9 trở xuống: Ghi trực tiếp vào thư mục Download công khai
+            if (!written) {
+                File downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                if (!downloadDir.exists()) {
+                    downloadDir.mkdirs();
+                }
+                File targetFile = new File(downloadDir, filename);
+                FileOutputStream fos = new FileOutputStream(targetFile);
+                fos.write(content.getBytes(StandardCharsets.UTF_8));
+                fos.flush();
+                fos.close();
+                written = true;
+                savedPath = targetFile.getAbsolutePath();
+            }
+
+            JSObject ret = new JSObject();
+            ret.put("success", written);
+            ret.put("path", savedPath);
+            ret.put("message", "Đã ghi thành công vào bộ nhớ máy: " + savedPath);
+            call.resolve(ret);
+        } catch (Exception e) {
+            // 3. Fallback bằng quyền Root nếu dính SELinux / Permission denied
+            if (isDeviceRooted()) {
+                try {
+                    File tempFile = new File(getContext().getCacheDir(), filename);
+                    FileOutputStream fos = new FileOutputStream(tempFile);
+                    fos.write(content.getBytes(StandardCharsets.UTF_8));
+                    fos.flush();
+                    fos.close();
+
+                    String destPath = "/storage/emulated/0/Download/" + filename;
+                    String[] cmds = new String[] {
+                        "cp " + tempFile.getAbsolutePath() + " " + destPath,
+                        "chmod 666 " + destPath,
+                        "rm " + tempFile.getAbsolutePath()
+                    };
+                    boolean ok = executeRootCommands(cmds);
+                    if (ok) {
+                        JSObject ret = new JSObject();
+                        ret.put("success", true);
+                        ret.put("path", destPath);
+                        ret.put("message", "Đã ghi trực tiếp vào /storage/emulated/0/Download/ bằng quyền Root!");
+                        call.resolve(ret);
+                        return;
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            call.reject("Lỗi ghi tệp Android: " + e.getMessage());
         }
     }
 }

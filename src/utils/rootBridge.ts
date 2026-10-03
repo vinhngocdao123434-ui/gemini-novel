@@ -26,6 +26,7 @@ declare global {
           acquireWakeLock: () => Promise<any>;
           releaseWakeLock: () => Promise<any>;
           requestBatteryOptimizationExemption: () => Promise<any>;
+          saveFileToAndroidStorage: (options: { filename: string; content: string }) => Promise<{ success: boolean; path: string; message: string }>;
         };
       };
     };
@@ -170,5 +171,32 @@ export const RootBridge = {
     } else {
       alert('Trên Android, tính năng này sẽ mở hộp thoại cấp quyền Miễn trừ Tối ưu Pin của hệ điều hành.');
     }
+  },
+
+  /**
+   * Ghi file trực tiếp vào bộ nhớ Android (/storage/emulated/0/Download/) qua Native Java Plugin
+   */
+  async saveFileToAndroid(filename: string, content: string): Promise<{ success: boolean; path?: string; message: string }> {
+    const plugin = window.Capacitor?.Plugins?.RootBridge;
+    if (plugin?.saveFileToAndroidStorage) {
+      try {
+        const res = await plugin.saveFileToAndroidStorage({ filename, content });
+        return {
+          success: !!res.success,
+          path: res.path,
+          message: res.message || `Đã lưu tệp vào ${res.path}`,
+        };
+      } catch (e: any) {
+        return {
+          success: false,
+          message: e?.message || 'Lỗi từ Native Plugin khi ghi bộ nhớ Android.',
+        };
+      }
+    }
+
+    return {
+      success: false,
+      message: 'Không phát hiện Native Capacitor Bridge (đang chạy trên Web Browser).',
+    };
   },
 };

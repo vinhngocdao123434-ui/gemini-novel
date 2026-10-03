@@ -15,9 +15,9 @@ import {
 } from 'lucide-react';
 import { ProjectData } from '../types';
 import {
-  triggerDirectDownload,
   triggerDataUriDownload,
   triggerAndroidNativeShare,
+  saveToAndroidStorageMaster,
 } from '../utils/fileDownloader';
 
 interface ExportNovelModalProps {
@@ -61,30 +61,23 @@ export const ExportNovelModal: React.FC<ExportNovelModalProps> = ({
 
   const filename = `${projectData.projectName}_FULL_TRANSLATED.txt`;
 
-  // 1. Tải trực tiếp bằng Blob Stream vào /storage/emulated/0/Download/
-  const handleBlobDownload = () => {
+  // 1. Ghi trực tiếp vào bộ nhớ Android (/storage/emulated/0/Download/) qua Native Java Plugin hoặc Direct Download
+  const handleSaveToAndroidStorage = async () => {
     setIsExporting(true);
+    setStatusMessage({ text: 'Đang tiến hành ghi tệp vào bộ nhớ Android...', type: 'info' });
     try {
       const fullText = buildFullNovelText();
-      const ok = triggerDirectDownload(filename, fullText);
-      if (ok) {
-        const msg = `✅ Đã gửi tệp ${filename} vào thư mục /storage/emulated/0/Download/. Hãy kiểm tra bảng thông báo tải xuống của Android!`;
-        setStatusMessage({ text: msg, type: 'success' });
-        onAddLog(msg, 'success');
+      const res = await saveToAndroidStorageMaster(filename, fullText);
+      if (res.success) {
+        setStatusMessage({ text: `✅ ${res.message}`, type: 'success' });
+        onAddLog(res.message, 'success');
       } else {
-        // Tự động fallback sang Data URI nếu Blob bị từ chối
-        const dataOk = triggerDataUriDownload(filename, fullText);
-        if (dataOk) {
-          const msg = `✅ Đã tải tệp ${filename} qua Data URI vào thư mục Download của máy!`;
-          setStatusMessage({ text: msg, type: 'success' });
-          onAddLog(msg, 'success');
-        } else {
-          setStatusMessage({ text: '❌ Không thể tải tệp trực tiếp.', type: 'error' });
-        }
+        setStatusMessage({ text: `❌ ${res.message}`, type: 'error' });
+        onAddLog(res.message, 'error');
       }
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      setStatusMessage({ text: `Lỗi tải tệp: ${errorMsg}`, type: 'error' });
+      setStatusMessage({ text: `Lỗi ghi tệp: ${errorMsg}`, type: 'error' });
     } finally {
       setIsExporting(false);
     }
@@ -208,7 +201,7 @@ export const ExportNovelModal: React.FC<ExportNovelModalProps> = ({
           <div className="space-y-2.5">
             {/* Option 1: Direct Download into Android /Download */}
             <button
-              onClick={handleBlobDownload}
+              onClick={handleSaveToAndroidStorage}
               disabled={isExporting || totalTranslated === 0}
               className="w-full p-3.5 rounded-xl bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white font-medium text-xs sm:text-sm flex items-center justify-between shadow-lg transition cursor-pointer disabled:opacity-40"
             >
@@ -217,7 +210,7 @@ export const ExportNovelModal: React.FC<ExportNovelModalProps> = ({
                   <Download className="w-4 h-4 text-white" />
                 </div>
                 <div>
-                  <div className="font-bold">Tải Vào Thư Mục /Download (.txt)</div>
+                  <div className="font-bold">Ghi Vào Bộ Nhớ /Download (Android MediaStore / Native)</div>
                   <div className="text-[11px] text-blue-100/80">Lưu vào bộ nhớ trong /storage/emulated/0/Download/</div>
                 </div>
               </div>
