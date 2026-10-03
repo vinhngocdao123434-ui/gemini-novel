@@ -1,20 +1,24 @@
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:8.5.2'
-    }
+plugins {
+    id 'base'
 }
 
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-    }
+task npmInstall(type: Exec) {
+    commandLine 'npm', 'install'
 }
 
-task clean(type: Delete) {
-    delete rootProject.buildDir
+task npmBuild(type: Exec) {
+    dependsOn npmInstall
+    commandLine 'npx', 'vite', 'build'
+}
+
+task assembleDebug {
+    dependsOn npmBuild
+}
+
+tasks.named('assemble') {
+    dependsOn npmBuild
+}
+
+tasks.named('build') {
+    dependsOn npmBuild
 }

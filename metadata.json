@@ -1,0 +1,8 @@
+{
+  "name": "DroidTranslator - AI Novel Translator & Reader",
+  "description": "Professional multi-chapter web novel translator powered by Gemini API key pools, dynamic auto-learning glossary, context continuity, anti-Hanzi protection, and immersive AMOLED/Sepia reader.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
